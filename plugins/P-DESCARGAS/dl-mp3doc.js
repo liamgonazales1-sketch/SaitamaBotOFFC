@@ -7,7 +7,7 @@ import { writeAudioTags } from '../../lib/audioTags.js'
 
 
 // ═══════════════════════════════════════
-// ✰ SAITAMABOT • YOUTUBE MP3
+// ✰ SAITAMABOT • YOUTUBE MP3 DOCUMENTO
 // ═══════════════════════════════════════
 
 const FAA_API =
@@ -17,7 +17,7 @@ const FAA_API =
 const TMP_DIR =
   path.join(
     os.tmpdir(),
-    'saitamabot-mp3'
+    'saitamabot-mp3-doc'
   )
 
 
@@ -63,6 +63,7 @@ function textValue(
     value === null ||
     value === ''
   ) {
+
     return fallback
   }
 
@@ -577,7 +578,7 @@ const handler = async (
 
     return m.reply(
 
-`༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 𝙼𝙿𝟹 ༻
+`༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 𝙼𝙿𝟹 𝙳𝙾𝙲 ༻
 
 ✰ 𝚄𝚜𝚊:
 ${usedPrefix}${command} <canción>
@@ -677,7 +678,7 @@ ${usedPrefix}${command} Ozuna Mi Niña
 
     const caption =
 
-`༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 𝙼𝙿𝟹 ༻
+`༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 𝙼𝙿𝟹 𝙳𝙾𝙲 ༻
 
 ✰ 𝚃í𝚝𝚞𝚕𝚘: ${title}
 ✰ 𝙰𝚞𝚝𝚘𝚛: ${author}
@@ -720,15 +721,14 @@ ${usedPrefix}${command} Ozuna Mi Niña
     // ✰ DESCARGAR
     // ═════════════════════════════════
 
-    const stat =
-      await downloadMp3(
-        result.mp3,
-        audioFile
-      )
+    await downloadMp3(
+      result.mp3,
+      audioFile
+    )
 
 
     // ═════════════════════════════════
-    // ✰ TAGS
+    // ✰ TAGS DEL MP3
     // ═════════════════════════════════
 
     try {
@@ -737,7 +737,9 @@ ${usedPrefix}${command} Ozuna Mi Niña
         audioFile,
         {
           title,
+
           author,
+
           image:
             thumbnail
         }
@@ -767,22 +769,28 @@ ${usedPrefix}${command} Ozuna Mi Niña
 
 
     // ═════════════════════════════════
-    // ✰ ENVIAR MP3
+    // ✰ NOMBRE DEL DOCUMENTO
+    // ═════════════════════════════════
+
+    const fileName =
+      `${safeFileName(title)}.mp3`
+
+
+    // ═════════════════════════════════
+    // ✰ ENVIAR MP3 COMO DOCUMENTO
     // ═════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
       {
-        audio,
+        document:
+          audio,
 
         mimetype:
           'audio/mpeg',
 
         fileName:
-          `${safeFileName(title)}.mp3`,
-
-        ptt:
-          false
+          fileName
       },
       {
         quoted:
@@ -819,6 +827,10 @@ ${usedPrefix}${command} Ozuna Mi Niña
 
   } catch (error) {
 
+    // ═════════════════════════════════
+    // ✰ LIMPIAR SI HAY ERROR
+    // ═════════════════════════════════
+
     await rm(
       audioFile,
       {
@@ -826,6 +838,10 @@ ${usedPrefix}${command} Ozuna Mi Niña
       }
     ).catch(() => {})
 
+
+    // ═════════════════════════════════
+    // ✰ REACCIÓN ERROR
+    // ═════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
@@ -840,7 +856,7 @@ ${usedPrefix}${command} Ozuna Mi Niña
 
     return m.reply(
 
-`༺ 𝙴𝚁𝚁𝙾𝚁 𝙼𝙿𝟹 ༻
+`༺ 𝙴𝚁𝚁𝙾𝚁 𝙼𝙿𝟹 𝙳𝙾𝙲 ༻
 
 ✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛.
 
@@ -860,26 +876,43 @@ ${usedPrefix}${command} Ozuna Mi Niña
 // ═══════════════════════════════════════
 
 handler.help = [
-  'mp3 <canción>',
-  'audio <canción>'
+  'playaudiodoc <canción>',
+  'audioplaydoc <canción>'
 ]
 
+
+// ═══════════════════════════════════════
+// ✰ CATEGORÍA
+// ═══════════════════════════════════════
 
 handler.tags = [
   'descargas'
 ]
 
 
+// ═══════════════════════════════════════
+// ✰ COMANDOS
+// ═══════════════════════════════════════
+
 handler.command = [
-  'mp3',
-  'mp3dl',
-  'audio',
-  'music',
-  'playaudio'
+  'playaudiodoc',
+    'audioplaydoc',
+  'mp3doc',
+  'audiomp3doc',
+  'docmp3',
+  'musicadoc'
 ]
 
 
+// ═══════════════════════════════════════
+// ✰ REGISTRO
+// ═══════════════════════════════════════
+
 handler.register = false
 
+
+// ═══════════════════════════════════════
+// ✰ EXPORTAR
+// ═══════════════════════════════════════
 
 export default handler

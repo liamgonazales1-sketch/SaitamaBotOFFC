@@ -155,7 +155,7 @@ const handler = async (m, ctx) => {
 
     if (partidas.has(chat))
       return m.reply(
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚈𝚊 𝚑𝚊𝚢 𝚞𝚗𝚊 𝚙𝚊𝚛𝚝𝚒𝚍𝚊 𝚊𝚌𝚝𝚒𝚟𝚊\n\n` +
         `${tablero(partidas.get(chat).tablero)}`
       )
@@ -164,7 +164,7 @@ const handler = async (m, ctx) => {
 
     if (!tipo)
       return m.reply(
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚃𝙸𝙲 𝚃𝙰𝙲 𝚃𝙾𝙴\n\n` +
         `✰ 𝚄𝚜𝚊\n` +
         `> !ttt ia facil\n` +
@@ -184,7 +184,7 @@ const handler = async (m, ctx) => {
 
       if (!dificultad)
         return m.reply(
-          `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+          
           `✰ 𝙳𝚒𝚏𝚒𝚌𝚞𝚕𝚝𝚊𝚍 𝚒𝚗𝚟𝚊𝚕𝚒𝚍𝚊\n\n` +
           `✰ 𝚄𝚜𝚊\n` +
           `> !ttt ia facil\n` +
@@ -208,7 +208,7 @@ const handler = async (m, ctx) => {
       const d = DIF[dificultad]
 
       return m.reply(
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚃𝚃𝚃 𝚅𝚂 𝙸𝙰\n\n` +
         `✰ 𝙳𝚒𝚏𝚒𝚌𝚞𝚕𝚝𝚊𝚍: *${dificultad.toUpperCase()}*\n` +
         `✰ ${d.texto}\n` +
@@ -224,7 +224,7 @@ const handler = async (m, ctx) => {
 
     if (!rival || rival === sender)
       return m.reply(
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝙳𝚎𝚗𝚐𝚊 𝚊 𝚞𝚗 𝚛𝚒𝚟𝚊𝚕\n\n` +
         `✰ 𝚄𝚜𝚊\n` +
         `> !ttt @usuario`
@@ -244,7 +244,7 @@ const handler = async (m, ctx) => {
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚁𝚎𝚝𝚘 𝚃𝚒𝚌 𝚃𝚊𝚌 𝚃𝚘𝚎\n\n` +
         `✰ @${nombre(sender)} *✖* retó a @${nombre(rival)} *⭕*\n\n` +
         `✰ 𝚄𝚜𝚊\n` +
@@ -258,17 +258,17 @@ const handler = async (m, ctx) => {
     const p = partidas.get(chat)
 
     if (!p || !p.esperando)
-      return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙽𝚘 𝚑𝚊𝚢 𝚛𝚎𝚝𝚘𝚜 𝚙𝚎𝚗𝚍𝚒𝚎𝚗𝚝𝚎𝚜`)
+      return m.reply(`✰ 𝙽𝚘 𝚑𝚊𝚢 𝚛𝚎𝚝𝚘𝚜 𝚙𝚎𝚗𝚍𝚒𝚎𝚗𝚝𝚎𝚜`)
 
     if (p.jugador2 !== sender)
-      return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙴𝚜𝚝𝚎 𝚛𝚎𝚝𝚘 𝚗𝚘 𝚎𝚜 𝚙𝚊𝚛𝚊 𝚟𝚘𝚜`)
+      return m.reply(`✰ 𝙴𝚜𝚝𝚎 𝚛𝚎𝚝𝚘 𝚗𝚘 𝚎𝚜 𝚙𝚊𝚛𝚊 𝚟𝚘𝚜`)
 
     p.esperando = false
     partidas.set(chat, p)
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝙿𝚊𝚛𝚝𝚒𝚍𝚊 𝚒𝚗𝚒𝚌𝚒𝚊𝚍𝚊\n\n` +
         `✰ @${nombre(p.jugador1)} *✖* vs @${nombre(sender)} *⭕*\n\n` +
         `✰ 𝚃𝚞𝚛𝚗𝚘 𝚍𝚎 @${nombre(p.jugador1)}\n` +
@@ -282,13 +282,13 @@ const handler = async (m, ctx) => {
     const p = partidas.get(chat)
 
     if (!p || !p.esperando || p.jugador2 !== sender)
-      return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙽𝚘 𝚝𝚒𝚎𝚗𝚎𝚜 𝚞𝚗 𝚛𝚎𝚝𝚘`)
+      return m.reply(`✰ 𝙽𝚘 𝚝𝚒𝚎𝚗𝚎𝚜 𝚞𝚗 𝚛𝚎𝚝𝚘`)
 
     partidas.delete(chat)
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚁𝚎𝚝𝚘 𝚛𝚎𝚌𝚑𝚊𝚣𝚊𝚍𝚘\n` +
         `✰ @${nombre(sender)} rechazó la partida`,
       mentions: [sender, p.jugador1]
@@ -299,10 +299,10 @@ const handler = async (m, ctx) => {
     const p = partidas.get(chat)
 
     if (!p)
-      return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙽𝚘 𝚑𝚊𝚢 𝚙𝚊𝚛𝚝𝚒𝚍𝚊`)
+      return m.reply(`✰ 𝙽𝚘 𝚑𝚊𝚢 𝚙𝚊𝚛𝚝𝚒𝚍𝚊`)
 
     if (![p.jugador1, p.jugador2].includes(sender))
-      return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙽𝚘 𝚙𝚊𝚛𝚝𝚒𝚌𝚒𝚙𝚊𝚜 𝚎𝚗 𝚎𝚜𝚝𝚊 𝚙𝚊𝚛𝚝𝚒𝚍𝚊`)
+      return m.reply(`✰ 𝙽𝚘 𝚙𝚊𝚛𝚝𝚒𝚌𝚒𝚙𝚊𝚜 𝚎𝚗 𝚎𝚜𝚝𝚊 𝚙𝚊𝚛𝚝𝚒𝚍𝚊`)
 
     const rival = p.vsIA ? null :
       sender === p.jugador1 ? p.jugador2 : p.jugador1
@@ -314,7 +314,7 @@ const handler = async (m, ctx) => {
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚁𝚎𝚗𝚍𝚒𝚌𝚒ó𝚗\n\n` +
         `✰ @${nombre(sender)} abandonó la partida` +
         (rival ? `\n✰ Victoria para @${nombre(rival)}` : ''),
@@ -334,7 +334,7 @@ const handler = async (m, ctx) => {
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚂𝚝𝚊𝚝𝚜 𝚃𝚃𝚃 — @${nombre(jid)}\n\n` +
         `✰ 𝚅𝚒𝚌𝚝𝚘𝚛𝚒𝚊𝚜: *${wins}*\n` +
         `✰ 𝙳𝚎𝚛𝚛𝚘𝚝𝚊𝚜: *${losses}*\n` +
@@ -351,7 +351,7 @@ const handler = async (m, ctx) => {
     ).sort({tttWins:-1}).limit(10).lean()
 
     if (!users.length)
-      return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙽𝚊𝚍𝚒𝚎 𝚑𝚊 𝚓𝚞𝚐𝚊𝚍𝚘 𝚊ú𝚗`)
+      return m.reply(`✰ 𝙽𝚊𝚍𝚒𝚎 𝚑𝚊 𝚓𝚞𝚐𝚊𝚍𝚘 𝚊ú𝚗`)
 
     const medallas = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟']
 
@@ -361,7 +361,7 @@ const handler = async (m, ctx) => {
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝚁𝚊𝚗𝚔𝚒𝚗𝚐 𝚃𝚃𝚃\n\n${lista}`,
       mentions: users.map(u => u.jid)
     }, { quoted: m })
@@ -382,12 +382,12 @@ handler.all = async (m, ctx) => {
   if (![p.jugador1, p.jugador2].includes(sender)) return
 
   if (p.turno !== sender)
-    return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙽𝚘 𝚎𝚜 𝚝𝚞 𝚝𝚞𝚛𝚗𝚘`)
+    return m.reply(`✰ 𝙽𝚘 𝚎𝚜 𝚝𝚞 𝚝𝚞𝚛𝚗𝚘`)
 
   const pos = POS[body]
 
   if (p.tablero[pos] !== ' ')
-    return m.reply(`*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n✰ 𝙲𝚊𝚜𝚒𝚕𝚕𝚊 𝚘𝚌𝚞𝚙𝚊𝚍𝚊`)
+    return m.reply(`✰ 𝙲𝚊𝚜𝚒𝚕𝚕𝚊 𝚘𝚌𝚞𝚙𝚊𝚍𝚊`)
 
   p.tablero[pos] = p.vsIA || sender === p.jugador1 ? '✖' : '⭕'
   p.movs++
@@ -413,7 +413,7 @@ handler.all = async (m, ctx) => {
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝙶𝚊𝚗𝚊𝚜𝚝𝚎\n\n` +
         `✰ @${nombre(sender)} ganó con *${win}*\n` +
         (premio ? `✰ 𝙿𝚛𝚎𝚖𝚒𝚘: *+${premio.toLocaleString()} ${S}*\n\n` : '\n') +
@@ -428,7 +428,7 @@ handler.all = async (m, ctx) => {
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝙴𝚖𝚙𝚊𝚝𝚎\n\n` +
         tablero(p.tablero),
       mentions: [sender]
@@ -449,7 +449,7 @@ handler.all = async (m, ctx) => {
 
       return conn.sendMessage(chat, {
         text:
-          `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+          
           `✰ 𝙻𝚊 𝙸𝙰 𝚐𝚊𝚗ó\n\n` +
           `✰ Jugada: *${ia + 1}*\n\n` +
           tablero(p.tablero),
@@ -463,7 +463,7 @@ handler.all = async (m, ctx) => {
 
       return conn.sendMessage(chat, {
         text:
-          `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+          
           `✰ 𝙴𝚖𝚙𝚊𝚝𝚎\n\n` +
           tablero(p.tablero),
         mentions: [sender]
@@ -474,7 +474,7 @@ handler.all = async (m, ctx) => {
 
     return conn.sendMessage(chat, {
       text:
-        `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+        
         `✰ 𝙻𝚊 𝙸𝙰 𝚓𝚞𝚐ó 𝚎𝚗 *${ia + 1}*\n\n` +
         tablero(p.tablero) +
         `\n\n✰ 𝚃𝚞 𝚝𝚞𝚛𝚗𝚘 — 𝚎𝚗𝚟í𝚊 𝚞𝚗 𝚗ú𝚖𝚎𝚛𝚘 𝚍𝚎𝚕 *1 𝚊𝚕 9*`,
@@ -487,7 +487,7 @@ handler.all = async (m, ctx) => {
 
   return conn.sendMessage(chat, {
     text:
-      `*𝙼𝙴𝙳𝙸𝙰𝙵𝙸𝚁𝙴 ༻*\n` +
+      
       `✰ 𝚃𝚞𝚛𝚗𝚘 𝚍𝚎 @${nombre(p.turno)}\n\n` +
       tablero(p.tablero) +
       `\n\n✰ 𝙴𝚗𝚟í𝚊 𝚞𝚗 𝚗ú𝚖𝚎𝚛𝚘 𝚍𝚎𝚕 *1 𝚊𝚕 9*`,
@@ -515,7 +515,7 @@ handler.command = [
   'desistir',
   'tttstats',
   'tttranking',
-  'tttr
+  'tttranking'
 ]
 
 export default handler

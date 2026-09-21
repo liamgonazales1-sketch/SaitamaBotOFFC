@@ -7,6 +7,51 @@ import readline from 'readline'
 import chalk from 'chalk'
 import NodeCache from 'node-cache'
 
+// SILENCIAR LOGS DE BAILEYS / LIBSIGNAL
+const __log = console.log.bind(console)
+const __info = console.info.bind(console)
+const __warn = console.warn.bind(console)
+
+const __isCryptoLog = (...args) => {
+  const t = args.map(String).join(' ')
+
+  return (
+    t.includes('Closing session') ||
+    t.includes('Decrypted message with closed session') ||
+    t.includes('Removing old closed session') ||
+    t.includes('SessionEntry') ||
+    t.includes('baseKey') ||
+    t.includes('Buffer') ||
+    t.includes('pendingPreKey') ||
+    t.includes('registrationId')
+  )
+}
+
+console.log = (...args) => {
+  if (__isCryptoLog(...args)) return
+  __log(...args)
+}
+
+console.info = (...args) => {
+  if (__isCryptoLog(...args)) return
+  __info(...args)
+}
+
+console.warn = (...args) => {
+  if (__isCryptoLog(...args)) return
+  __warn(...args)
+}
+
+const __error = console.error.bind(console)
+
+console.error = (...args) => {
+  if (__isCryptoLog(...args)) return
+  __error(...args)
+}
+
+console.debug = () => {}
+console.trace = () => {}
+
 import config from './config.js'
 import { connectDB } from './lib/database/db.js'
 import { handler, loadPlugins, setupWatchers, plugins } from './handler.js'
@@ -153,7 +198,7 @@ async function startBot() {
 
       keys: makeCacheableSignalKeyStore(
         state.keys,
-        logger
+        pino({ level: "silent" })
       )
     },
 
