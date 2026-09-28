@@ -241,22 +241,17 @@ const handler = async (
             )
 
 
-          caption +=
-`✰ ${index + 1}. ${title}
+caption +=
+`✰ ${index + 1}. _*${title}*_
+༻ _*𝙰𝚛𝚝𝚒𝚜𝚝𝚊:*_> * ${author}*
+༻ _*𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:*_> * ${duration}*
+༻ _*𝚅𝚒𝚜𝚝𝚊𝚜:*_> * ${views}*
+༻ _*𝙿𝚞𝚋𝚕𝚒𝚌𝚊𝚍𝚘:*_> * ${published}*
+༻ _*𝙻𝚒𝚗𝚔:*_> * ${url}*
 
-༻ 𝙰𝚛𝚝𝚒𝚜𝚝𝚊:
-> ${author}
-༻ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:
-> ${duration}
-༻ 𝚅𝚒𝚜𝚝𝚊𝚜:
-> ${views}
-༻ 𝙿𝚞𝚋𝚕𝚒𝚌𝚊𝚍𝚘:
-> ${published}
-༻ 𝙻𝚒𝚗𝚔:
-> ${url}
+*༺═────── ✰ ──────═༻*
 
 `
-
         }
       )
 
@@ -369,6 +364,6 @@ handler.command = [
   'buscarvideo'
 ]
 
-handler.register = true
+handler.register = false
 
 export default handler

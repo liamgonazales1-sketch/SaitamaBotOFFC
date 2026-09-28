@@ -473,23 +473,18 @@ async function sendYoutubeCard(
   // ✰ INFORMACIÓN
   // ═════════════════════════════════
 
-  const infoText =
+const infoText =
+`*༺═────── ✰ ──────═༻*
+*༻ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ✰*
 
-`*༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ༻*
+*༻ 𝚃í𝚝𝚞𝚕𝚘:* *${video.title}*
+*༻ 𝙲𝚊𝚗𝚊𝚕:* *${video.author}*
+*༻ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* *${video.duration}*
+*༻ 𝚅𝚒𝚜𝚝𝚊𝚜:* *${video.views}*
+*༻ 𝙿𝚞𝚋𝚕𝚒𝚌𝚊𝚍𝚘:* *${video.publishedAt}*
+*༻ 𝚁𝚎𝚜𝚞𝚕𝚝𝚊𝚍𝚘:* *${index + 1}/${results.length}*
 
-*✰ 𝚃í𝚝𝚞𝚕𝚘:*
-${video.title}
-*✰ 𝙲𝚊𝚗𝚊𝚕:*
-${video.author}
-*✰ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:*
-${video.duration}
-*✰ 𝚅𝚒𝚜𝚝𝚊𝚜:*
-${video.views}
-*✰ 𝙿𝚞𝚋𝚕𝚒𝚌𝚊𝚍𝚘:*
-${video.publishedAt}
-*✰ 𝚁𝚎𝚜𝚞𝚕𝚝𝚊𝚍𝚘:*
-${index + 1}/${results.length}
-
+*༺═────── ✰ ──────═༻*`
 ✰ ╰┈➤ 𝟮𝟬𝟮𝟲`
 
 

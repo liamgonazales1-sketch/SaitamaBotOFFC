@@ -875,7 +875,10 @@ handler.command = [
   'mp3dl',
   'audio',
   'music',
-  'playaudio'
+  'playaudio',
+  'musica',
+  'cancion',
+  'audioplay'
 ]
 
 

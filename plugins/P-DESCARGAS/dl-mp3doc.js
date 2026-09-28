@@ -900,7 +900,10 @@ handler.command = [
   'mp3doc',
   'audiomp3doc',
   'docmp3',
-  'musicadoc'
+  'musicadoc',
+  'audiodoc',
+  'canciondoc',
+  'cansiondoc'
 ]
 
 

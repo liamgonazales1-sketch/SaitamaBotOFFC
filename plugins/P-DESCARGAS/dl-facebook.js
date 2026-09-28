@@ -5,11 +5,8 @@ import config from '../../config.js'
 // ༺ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 • 𝙳𝙾𝚆𝙽𝙻𝙾𝙰𝙳𝙴𝚁 ༻
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const LEMPI_API =
-  'https://api.lempi.lat/dl/facebook'
-
-const API_KEY =
-  'lem992'
+const AZBRY_API =
+  'https://api.azbry.com/api/download/facebook'
 
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 11; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
@@ -22,7 +19,7 @@ const VIDEO_TIMEOUT =
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝙾𝙱𝚃𝙴𝙽𝙴𝚁 𝚄𝚁𝙻
+// OBTENER URL DE FACEBOOK
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function getFacebookUrl(m, text = '') {
@@ -55,25 +52,24 @@ function getFacebookUrl(m, text = '') {
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝚅𝙰𝙻𝙸𝙳𝙰𝚁 𝚄𝚁𝙻
+// VALIDAR URL
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function isFacebookUrl(url) {
 
   return /^https?:\/\/(?:www\.)?(?:facebook\.com|fb\.watch|fb\.me|video\.fb\.com)\//i
     .test(url)
-
 }
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝙻𝙴𝙼𝙿𝙸
+// AZBRY FACEBOOK
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async function lempiFacebook(url) {
+async function azbryFacebook(url) {
 
   const apiUrl =
-    `${LEMPI_API}?url=${encodeURIComponent(url)}&quality=hd&apikey=${API_KEY}`
+    `${AZBRY_API}?url=${encodeURIComponent(url)}`
 
   const response =
     await fetch(
@@ -90,43 +86,118 @@ async function lempiFacebook(url) {
       }
     )
 
-  const text =
+  const responseText =
     await response.text()
 
   if (!response.ok) {
+
     throw new Error(
-      `Lempi HTTP ${response.status}`
+      `Azbry HTTP ${response.status}`
     )
   }
 
-  let json
+  let data
 
   try {
-    json = JSON.parse(text)
+
+    data =
+      JSON.parse(responseText)
+
   } catch {
+
     throw new Error(
-      'Lempi no respondió JSON.'
+      'Azbry no respondió JSON válido.'
     )
   }
 
-  if (!json?.status) {
+  if (!data?.status) {
+
     throw new Error(
-      'No se encontraron resultados.'
+      'Azbry no pudo obtener el vídeo.'
     )
   }
 
-  if (!json?.datos?.url) {
+  if (
+    !Array.isArray(data?.result?.medias) ||
+    !data.result.medias.length
+  ) {
+
     throw new Error(
-      'No se encontró el vídeo.'
+      'Azbry no devolvió vídeos disponibles.'
     )
   }
 
-  return json
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // BUSCAR HD PRIMERO
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  const medias =
+    data.result.medias
+
+  const hd =
+    medias.find(
+      media =>
+        String(media?.quality || '').toLowerCase() === 'hd' &&
+        media?.videoAvailable === true &&
+        media?.audioAvailable === true &&
+        media?.url
+    )
+
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // SI NO HAY HD, USAR CUALQUIER CALIDAD
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  const media =
+    hd ||
+    medias.find(
+      item =>
+        item?.url &&
+        item?.videoAvailable !== false
+    )
+
+
+  if (!media?.url) {
+
+    throw new Error(
+      'No se encontró una URL de vídeo válida.'
+    )
+  }
+
+
+  return {
+
+    ...data,
+
+    videoUrl:
+      media.url,
+
+    quality:
+      media.quality ||
+      '—',
+
+    size:
+      media.formattedSize ||
+      '—',
+
+    title:
+      data.result?.title ||
+      'Facebook Video',
+
+    thumbnail:
+      data.result?.thumbnail ||
+      '',
+
+    duration:
+      data.result?.duration ||
+      '—'
+  }
 }
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝙳𝙴𝚂𝙲𝙰𝚁𝙶𝙰𝚁 𝚅𝙸𝙳𝙴𝙾
+// DESCARGAR VÍDEO
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function downloadVideo(videoUrl) {
@@ -144,11 +215,13 @@ async function downloadVideo(videoUrl) {
         },
 
         redirect: 'follow',
+
         timeout: VIDEO_TIMEOUT
       }
     )
 
   if (!response.ok) {
+
     throw new Error(
       `Facebook CDN HTTP ${response.status}`
     )
@@ -160,14 +233,16 @@ async function downloadVideo(videoUrl) {
     )
 
   if (!buffer.length) {
+
     throw new Error(
       'El vídeo está vacío.'
     )
   }
 
   if (buffer.length < 10 * 1024) {
+
     throw new Error(
-      'El archivo recibido no es válido.'
+      'El archivo recibido no parece ser un vídeo válido.'
     )
   }
 
@@ -176,73 +251,80 @@ async function downloadVideo(videoUrl) {
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝙽𝙾𝙼𝙱𝚁𝙴 𝚂𝙴𝙶𝚄𝚁𝙾
+// NOMBRE DEL ARCHIVO
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function safeFileName(title) {
 
   return String(
-    title || 'facebook-video'
+    title ||
+    'facebook-video'
   )
+
     .replace(
       /[<>:"/\\|?*\x00-\x1F]/g,
       ''
     )
+
     .replace(
       /\s+/g,
       ' '
     )
-    .trim()
-    .slice(0, 80)
-    || 'facebook-video'
 
+    .trim()
+
+    .slice(
+      0,
+      80
+    )
+
+    || 'facebook-video'
 }
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝙲𝙰𝙿𝚃𝙸𝙾𝙽
+// CAPTION
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function createCaption(data) {
 
-  const description =
-    data.descripcion ||
-    'Sin descripción'
+  const title =
+    data.title ||
+    'Facebook Video'
 
   const duration =
-    data.duracion ||
+    data.duration ||
     '—'
 
   const quality =
-    data.datos?.calidad ||
+    data.quality ||
     '—'
 
   const size =
-    data.datos?.tamaño ||
+    data.size ||
     '—'
 
-  return `༺ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ༻
+  return `*༺═────── ✰ ──────═༻*
+*༻ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
 
-✰ 𝙳𝚎𝚜𝚌𝚛𝚒𝚙𝚌𝚒ó𝚗: ${description}
-✰ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗: ${duration}
-✰ 𝙲𝚊𝚕𝚒𝚍𝚊𝚍: ${quality}
-✰ 𝚃𝚊𝚖𝚊ñ𝚘: ${size}
+*༻ 𝚃í𝚝𝚞𝚕𝚘:* *${title}*
+*༻ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* *${duration}*
+*༻ 𝚀𝚞𝚊𝚕𝚒𝚝𝚢:* *${quality}*
+*༻ 𝚃𝚊𝚖𝚊ñ𝚘:* *${size}*
 
-✰ ${config.botName || 'SaitamaBot'}`
+*༺═────── ✰ ──────═༻*`
 }
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝙷𝙰𝙽𝙳𝙻𝙴𝚁
+// HANDLER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const handler = async (
+let handler = async (
   m,
   {
     conn,
-    text,
-    usedPrefix,
-    command
+    text
   }
 ) => {
 
@@ -253,45 +335,38 @@ const handler = async (
     )
 
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ✰ 𝚂𝙸𝙽 𝚄𝚁𝙻
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
   if (!url) {
 
     return m.reply(
-`༺ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ༻
+      `*༺═────── ✰ ──────═༻*
 
-✰ 𝙴𝚗𝚟í𝚊 𝚞𝚗 𝚎𝚗𝚕𝚊𝚌𝚎 𝚍𝚎 𝙵𝚊𝚌𝚎𝚋𝚘𝚘𝚔.
+*༻ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
 
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix + command} https://www.facebook.com/...`
+✰ Envía un enlace de Facebook.
+
+*Ejemplo:*
+.fb https://www.facebook.com/...
+
+*༺═────── ✰ ──────═༻*`
     )
-
   }
 
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ✰ 𝚄𝚁𝙻 𝙸𝙽𝚅Á𝙻𝙸𝙳𝙰
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   if (!isFacebookUrl(url)) {
 
     return m.reply(
-`༺ 𝙴𝙽𝙻𝙰𝙲𝙴 𝙸𝙽𝚅Á𝙻𝙸𝙳𝙾 ༻
+      `*༺═────── ✰ ──────═༻*
 
-✰ El enlace no pertenece a Facebook.
+*༻ 𝙻𝚒𝚗𝚔 𝚒𝚗𝚟á𝚕𝚒𝚍𝚘 ✰*
 
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix + command} https://www.facebook.com/...`
+✰ El enlace no parece ser de Facebook.
+
+*༺═────── ✰ ──────═༻*`
     )
-
   }
 
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ✰ 𝚁𝙴𝙰𝙲𝙲𝙸Ó𝙽
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // REACCIÓN PROCESANDO
 
   await conn.sendMessage(
     m.chat,
@@ -301,42 +376,38 @@ ${usedPrefix + command} https://www.facebook.com/...`
         key: m.key
       }
     }
-  ).catch(() => {})
+  )
 
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ✰ 𝙿𝚁𝙾𝙲𝙴𝚂𝙰𝙽𝙳𝙾
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   await m.reply(
-`༺ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ༻
+    `*༺═────── ✰ ──────═༻*
 
-✰ 𝙰𝚗𝚊𝚕𝚒𝚣𝚊𝚗𝚍𝚘 𝚎𝚗𝚕𝚊𝚌𝚎...
-✰ 𝙾𝚋𝚝𝚎𝚗𝚒𝚎𝚗𝚍𝚘 𝚟í𝚍𝚎𝚘...
+*༻ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
 
-✰ 𝙴𝚜𝚙𝚎𝚛𝚊 𝚞𝚗 𝚖𝚘𝚖𝚎𝚗𝚝𝚘...`
+✰ Analizando enlace...
+✰ Obteniendo vídeo en HD...
+
+*༺═────── ✰ ──────═༻*`
   )
 
 
   try {
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✰ 𝙲𝙾𝙽𝚂𝚄𝙻𝚃𝙰𝚁 𝙰𝙿𝙸
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Obtener vídeo desde Azbry
 
     const data =
-      await lempiFacebook(
+      await azbryFacebook(
         url
       )
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✰ 𝚅𝙸𝙳𝙴𝙾
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // URL directa
 
     const videoUrl =
-      data.datos.url
+      data.videoUrl
 
+
+    // Descargar vídeo
 
     const videoBuffer =
       await downloadVideo(
@@ -344,9 +415,7 @@ ${usedPrefix + command} https://www.facebook.com/...`
       )
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✰ 𝙸𝙽𝙵𝙾
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Crear caption
 
     const caption =
       createCaption(
@@ -354,14 +423,14 @@ ${usedPrefix + command} https://www.facebook.com/...`
       )
 
 
+    // Nombre
+
     const title =
-      data.titulo ||
+      data.title ||
       'Facebook Video'
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✰ 𝙴𝙽𝚅𝙸𝙰𝚁
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Enviar vídeo
 
     await conn.sendMessage(
       m.chat,
@@ -382,9 +451,7 @@ ${usedPrefix + command} https://www.facebook.com/...`
     )
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✰ 𝚁𝙴𝙰𝙲𝙲𝙸Ó𝙽 𝙵𝙸𝙽𝙰𝙻
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // REACCIÓN ÉXITO
 
     await conn.sendMessage(
       m.chat,
@@ -394,10 +461,17 @@ ${usedPrefix + command} https://www.facebook.com/...`
           key: m.key
         }
       }
-    ).catch(() => {})
-
+    )
 
   } catch (error) {
+
+    console.error(
+      '[FACEBOOK DL]',
+      error
+    )
+
+
+    // REACCIÓN ERROR
 
     await conn.sendMessage(
       m.chat,
@@ -407,31 +481,26 @@ ${usedPrefix + command} https://www.facebook.com/...`
           key: m.key
         }
       }
-    ).catch(() => {})
-
-
-    return m.reply(
-`༺ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ༻
-
-✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚎𝚕 𝚟í𝚍𝚎𝚘.
-
-✰ 𝙳𝚎𝚝𝚊𝚕𝚕𝚎:
-${String(
-  error?.message ||
-  error ||
-  'Error desconocido.'
-).slice(0, 300)}
-
-✰ ${config.botName || 'SaitamaBot'}`
     )
 
-  }
 
+    await m.reply(
+      `*༺═────── ✰ ──────═༻*
+
+*༻ 𝙴𝚁𝚁𝙾𝚁 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
+
+✰ No se pudo descargar el vídeo.
+
+✰ ${error?.message || 'Error desconocido.'}
+
+*༺═────── ✰ ──────═༻*`
+    )
+  }
 }
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✰ 𝙲𝙾𝙽𝙵𝙸𝙶𝚄𝚁𝙰𝙲𝙸Ó𝙽
+// CONFIGURACIÓN
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 handler.help = [

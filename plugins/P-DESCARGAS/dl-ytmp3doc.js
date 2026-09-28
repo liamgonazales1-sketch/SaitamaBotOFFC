@@ -486,21 +486,10 @@ ${usedPrefix + command} https://youtu.be/xxxxx`
 
     } catch {}
 
-    const caption =
-`༺ 𝚈𝚃𝙼𝙿𝟹𝙳𝙾𝙲 ༻
-
-✰ 𝚃í𝚝𝚞𝚕𝚘:
-${title}
-
-✰ 𝙰𝚛𝚝𝚒𝚜𝚝𝚊 / 𝙲𝚊𝚗𝚊𝚕:
-${author}
-
-✰ 𝙵𝚘𝚛𝚖𝚊𝚝𝚘:
-MP3
-
-✰ 𝙰𝙿𝙸:
-${media.api}`
-
+const caption =
+`*༺═────── ✰ ──────═༻*
+*༻ 𝚂𝙰𝙸𝚃𝙰𝙼𝙰𝙱𝙾𝚃 ✰*
+*༺═────── ✰ ──────═༻*`
     // ═══════════════════════════════════
     // 𝙴𝙽𝚅𝙸𝙰𝚁 𝙲𝙾𝙼𝙾 𝙳𝙾𝙲𝚄𝙼𝙴𝙽𝚃𝙾
     // ═══════════════════════════════════
@@ -589,8 +578,7 @@ ${String(
 
 handler.help = [
   'ytmp3doc <url>',
-  'ytadoc <url>',
-  'mp3doc <url>'
+  'ytadoc <url>'
 ]
 
 handler.tags = [
@@ -599,8 +587,7 @@ handler.tags = [
 
 handler.command = [
   'ytmp3doc',
-  'ytadoc',
-  'mp3doc'
+  'ytadoc'
 ]
 
 export default handler
