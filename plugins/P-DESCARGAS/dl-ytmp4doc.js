@@ -1,112 +1,207 @@
-import axios from 'axios'
+
+	mport axios from 'axios'
 import fs from 'fs'
 import path from 'path'
 import { rm } from 'fs/promises'
 import { pipeline } from 'stream/promises'
 
-// API 1 → StellarWA
-// API 2 → SylphyAPI
 
-const STELLAR_API =
-  'https://api.stellarwa.xyz'
+// ═══════════════════════════════════════
+// ✰ SAITAMABOT • YOUTUBE MP4 DOCUMENT
+// ✰ HIKARI API
+// ═══════════════════════════════════════
 
-const STELLAR_KEY =
-  'proyectsV2'
+const HIKARI_API =
+  'https://hikariapi.skyultraweb.com/api/scrapers/youtube/video'
 
-const SYLPHY_API =
-  'https://www.sylphyy.xyz/download/v2/ytmp4'
 
-const SYLPHY_KEY =
-  'sylph-d7ed7664'
+// Coloca tu clave de HikariAPI aquí
+// o utiliza la variable de entorno HIKARI_API_KEY
+const HIKARI_API_KEY =
+  process.env.HIKARI_API_KEY || 'hk_live_abQitrvggZrwvQ4yN_8rwx8pj_Dy7NmDtrgMpqewG4c'
+
+
+// ═══════════════════════════════════════
+// ✰ CALIDADES
+// De mayor a menor
+// ═══════════════════════════════════════
+
+const QUALITIES = [
+  '1080p',
+  '720p',
+  '480p',
+  '360p',
+  '240p',
+  '144p'
+]
+
 
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
 
+
 const API_TIMEOUT =
   120000
+
 
 const DOWNLOAD_TIMEOUT =
   600000
 
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🧹 NOMBRE SEGURO
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function safeFileName(title) {
+// ═══════════════════════════════════════
+// ✰ OBTENER VIDEO
+// ✰ BUSCA LA MEJOR CALIDAD DISPONIBLE
+// ═══════════════════════════════════════
 
-  return String(
-    title ||
-    'YouTube Video'
+async function fetchHikari(url) {
+
+  let lastError = null
+
+
+  for (const quality of QUALITIES) {
+
+    try {
+
+      const response =
+        await axios.get(
+          HIKARI_API,
+          {
+            params: {
+              url,
+              quality,
+              apikey: HIKARI_API_KEY
+            },
+
+            timeout:
+              API_TIMEOUT,
+
+            headers: {
+              'User-Agent':
+                USER_AGENT,
+
+              Accept:
+                'application/json'
+            }
+          }
+        )
+
+
+      const json =
+        response?.data
+
+
+      // ═════════════════════════════════
+      // ✰ VALIDAR RESPUESTA
+      // ═════════════════════════════════
+
+      if (
+        !json?.ok ||
+        json?.httpStatus !== 200 ||
+        !json?.response?.success
+      ) {
+
+        lastError =
+          new Error(
+            json?.response?.message ||
+            json?.message ||
+            `Hikari no pudo obtener ${quality}.`
+          )
+
+        continue
+      }
+
+
+      const data =
+        json.response?.data
+
+
+      if (!data) {
+
+        lastError =
+          new Error(
+            `Hikari no devolvió datos para ${quality}.`
+          )
+
+        continue
+      }
+
+
+      const downloadUrl =
+        data.downloadUrl ||
+        data.url
+
+
+      if (!downloadUrl) {
+
+        lastError =
+          new Error(
+            `Hikari no devolvió enlace para ${quality}.`
+          )
+
+        continue
+      }
+
+
+      // ═════════════════════════════════
+      // ✰ CALIDAD ENCONTRADA
+      // ═════════════════════════════════
+
+      return {
+
+        download:
+          downloadUrl,
+
+        title:
+          data.filename ||
+          'YouTube Video',
+
+        quality:
+          json.response?.quality ||
+          quality,
+
+        filename:
+          data.filename ||
+          'YouTube Video'
+      }
+
+
+    } catch (error) {
+
+      lastError =
+        error
+
+      continue
+    }
+  }
+
+
+  throw new Error(
+    lastError?.message ||
+    'No se pudo obtener ninguna calidad disponible.'
   )
-    .replace(
-      /[<>:"/\\|?*\x00-\x1F]/g,
-      ''
-    )
-    .replace(
-      /\s+/g,
-      ' '
-    )
-    .trim()
-    .slice(0, 100)
-    ||
-    'YouTube Video'
 }
 
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🔗 NORMALIZAR URL
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function normalizeYouTubeUrl(input) {
+// ═══════════════════════════════════════
+// ✰ DESCARGAR VIDEO
+// ═══════════════════════════════════════
 
-  const value =
-    String(
-      input || ''
-    ).trim()
+async function downloadVideo(url) {
 
-  if (!value) {
+  if (!url) {
 
     throw new Error(
-      'Debes ingresar un enlace de YouTube.'
+      'URL de descarga vacía.'
     )
   }
 
-  if (
-    /^https?:\/\//i.test(value)
-  ) {
-
-    return value
-  }
-
-  return (
-    'https://www.youtube.com/watch?v=' +
-    encodeURIComponent(value)
-  )
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 📥 DESCARGAR VIDEO
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async function downloadToFile(
-  downloadUrl,
-  filePath
-) {
-
-  if (!downloadUrl) {
-
-    throw new Error(
-      'La API no devolvió una URL de descarga.'
-    )
-  }
 
   const response =
     await axios.get(
-      downloadUrl,
+      url,
       {
-
         responseType:
           'stream',
 
@@ -135,222 +230,48 @@ async function downloadToFile(
     )
 
 
-  await pipeline(
-    response.data,
-    fs.createWriteStream(
-      filePath
-    )
+  return response.data
+}
+
+
+
+// ═══════════════════════════════════════
+// ✰ NOMBRE SEGURO
+// ═══════════════════════════════════════
+
+function safeFileName(title) {
+
+  return String(
+    title ||
+    'YouTube Video'
   )
 
-
-  const stat =
-    await fs.promises.stat(
-      filePath
+    .replace(
+      /[<>:"/\\|?*\x00-\x1F]/g,
+      ''
     )
 
-
-  if (
-    !stat.isFile() ||
-    stat.size <= 0
-  ) {
-
-    throw new Error(
-      'El archivo descargado está vacío.'
+    .replace(
+      /\s+/g,
+      ' '
     )
-  }
 
+    .trim()
 
-  return stat
+    .slice(
+      0,
+      100
+    )
+
+    ||
+    'YouTube Video'
 }
 
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🥇 SAIAPI1 • STELLARWA
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async function fetchStellar(url) {
-
-  const response =
-    await axios.get(
-      `${STELLAR_API}/dl/ytmp4`,
-      {
-
-        params: {
-          url,
-          quality: 'auto',
-          key: STELLAR_KEY
-        },
-
-        timeout:
-          API_TIMEOUT,
-
-        headers: {
-          'User-Agent':
-            USER_AGENT,
-
-          Accept:
-            'application/json'
-        }
-      }
-    )
-
-
-  const data =
-    response.data
-
-
-  if (
-    !data?.status ||
-    !data?.data?.dl
-  ) {
-
-    throw new Error(
-      data?.message ||
-      'StellarWA no devolvió el vídeo.'
-    )
-  }
-
-
-  return {
-
-    download:
-      data.data.dl,
-
-    title:
-      data.data.title ||
-      'YouTube Video',
-
-    quality:
-      data.data.quality ||
-      'Auto',
-
-    api:
-      'SaiAPI1'
-  }
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🥈 SAIAPI2 • SYLPHY
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async function fetchSylphy(url) {
-
-  const response =
-    await axios.get(
-      SYLPHY_API,
-      {
-
-        params: {
-          url
-        },
-
-        timeout:
-          API_TIMEOUT,
-
-        headers: {
-          'User-Agent':
-            USER_AGENT,
-
-          Accept:
-            'application/json',
-
-          'X-API-Key':
-            SYLPHY_KEY
-        }
-      }
-    )
-
-
-  const data =
-    response.data
-
-
-  if (
-    !data?.status ||
-    !data?.result?.dl_url
-  ) {
-
-    throw new Error(
-      data?.message ||
-      'SylphyAPI no devolvió el vídeo.'
-    )
-  }
-
-
-  return {
-
-    download:
-      data.result.dl_url,
-
-    title:
-      data.result.title ||
-      'YouTube Video',
-
-    quality:
-      data.result.quality ||
-      'Desconocida',
-
-    api:
-      'SaiAPI2'
-  }
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🔄 SISTEMA DE FALLBACK
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async function getVideo(url) {
-
-  let stellarError =
-    null
-
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🥇 API 1
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  try {
-
-    return await fetchStellar(
-      url
-    )
-
-  } catch (error) {
-
-    stellarError =
-      error?.message ||
-      'Error desconocido'
-  }
-
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🥈 API 2
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  try {
-
-    return await fetchSylphy(
-      url
-    )
-
-  } catch (error) {
-
-    throw new Error(
-      `SaiAPI1: ${stellarError}\n` +
-      `SaiAPI2: ${
-        error?.message ||
-        'Error desconocido'
-      }`
-    )
-  }
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🎬 HANDLER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ═══════════════════════════════════════
+// ✰ HANDLER
+// ═══════════════════════════════════════
 
 const handler = async (
   m,
@@ -368,9 +289,9 @@ const handler = async (
     ).trim()
 
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ❌ SIN TEXTO
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ═════════════════════════════════════
+  // ✰ SIN URL
+  // ═════════════════════════════════════
 
   if (!input) {
 
@@ -385,9 +306,9 @@ ${usedPrefix + command} https://youtu.be/xxxxx`
   }
 
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ⏳ REACCIÓN
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ═════════════════════════════════════
+  // ✰ REACCIÓN
+  // ═════════════════════════════════════
 
   await conn.sendMessage(
     m.chat,
@@ -400,6 +321,10 @@ ${usedPrefix + command} https://youtu.be/xxxxx`
   ).catch(() => {})
 
 
+  // ═════════════════════════════════════
+  // ✰ DIRECTORIO TEMPORAL
+  // ═════════════════════════════════════
+
   const tmpDir =
     './tmp'
 
@@ -407,7 +332,8 @@ ${usedPrefix + command} https://youtu.be/xxxxx`
   await fs.promises.mkdir(
     tmpDir,
     {
-      recursive: true
+      recursive:
+        true
     }
   )
 
@@ -421,88 +347,26 @@ ${usedPrefix + command} https://youtu.be/xxxxx`
 
   try {
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔗 URL
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ═══════════════════════════════════
+    // ✰ YOUTUBE URL
+    // ═══════════════════════════════════
 
     const ytUrl =
-      normalizeYouTubeUrl(
-        input
-      )
+      input.startsWith('http')
+        ? input
+        : `https://www.youtube.com/watch?v=${encodeURIComponent(input)}`
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔄 OBTENER VIDEO
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ═══════════════════════════════════
+    // ✰ HIKARI
+    // ✰ MEJOR CALIDAD DISPONIBLE
+    // ═══════════════════════════════════
 
     const media =
-      await getVideo(
+      await fetchHikari(
         ytUrl
       )
 
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 📥 DESCARGAR
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    try {
-
-      await downloadToFile(
-        media.download,
-        filePath
-      )
-
-    } catch (downloadError) {
-
-      // Si falla Stellar,
-      // probar directamente Sylphy.
-
-      if (
-        media.api === 'SaiAPI1'
-      ) {
-
-        await rm(
-          filePath,
-          {
-            force: true
-          }
-        ).catch(() => {})
-
-
-        const backup =
-          await fetchSylphy(
-            ytUrl
-          )
-
-
-        await downloadToFile(
-          backup.download,
-          filePath
-        )
-
-
-        media.download =
-          backup.download
-
-        media.title =
-          backup.title
-
-        media.quality =
-          backup.quality
-
-        media.api =
-          backup.api
-
-      } else {
-
-        throw downloadError
-      }
-    }
-
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 📝 TÍTULO
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     const title =
       safeFileName(
@@ -510,33 +374,53 @@ ${usedPrefix + command} https://youtu.be/xxxxx`
       )
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 📄 CAPTION
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ═══════════════════════════════════
+    // ✰ DESCARGAR MP4
+    // ═══════════════════════════════════
 
-    const caption =
-`༺ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 𝙼𝙿𝟺 𝙳𝙾𝙲 ༻
-
-✰ 𝚃í𝚝𝚞𝚕𝚘:
-${title}
-✰ 𝙲𝚊𝚕𝚒𝚍𝚊𝚍:
-${media.quality || 'Desconocida'}
-✰ 𝙵𝚘𝚛𝚖𝚊𝚝𝚘:
-MP4
-✰ 𝚃𝚒𝚙𝚘:
-Documento
-✰ 𝙰𝙿𝙸:
-${media.api}`
+    const videoStream =
+      await downloadVideo(
+        media.download
+      )
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 📄 ENVIAR COMO DOCUMENTO
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    await pipeline(
+      videoStream,
+      fs.createWriteStream(
+        filePath
+      )
+    )
+
+
+    // ═══════════════════════════════════
+    // ✰ COMPROBAR ARCHIVO
+    // ═══════════════════════════════════
+
+    const stat =
+      await fs.promises.stat(
+        filePath
+      )
+
+
+    if (
+      !stat.isFile() ||
+      stat.size <= 0
+    ) {
+
+      throw new Error(
+        'El vídeo descargado está vacío.'
+      )
+    }
+
+
+    // ═══════════════════════════════════
+    // ✰ ENVIAR COMO DOCUMENTO
+    // ✰ CAPTION = SOLO TÍTULO
+    // ═══════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
       {
-
         document:
           fs.readFileSync(
             filePath
@@ -548,8 +432,8 @@ ${media.api}`
         fileName:
           `${title}.mp4`,
 
-        caption
-
+        caption:
+          media.title || title
       },
       {
         quoted:
@@ -558,9 +442,9 @@ ${media.api}`
     )
 
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✅ REACCIÓN
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ═══════════════════════════════════
+    // ✰ ÉXITO
+    // ═══════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
@@ -575,9 +459,9 @@ ${media.api}`
 
   } catch (error) {
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ❌ REACCIÓN
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ═══════════════════════════════════
+    // ✰ ERROR
+    // ═══════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
@@ -589,10 +473,6 @@ ${media.api}`
       }
     ).catch(() => {})
 
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ❌ ERROR
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     return m.reply(
 `༺ 𝚈𝚃𝙼𝙿𝟺 𝙳𝙾𝙲 𝙴𝚁𝚁𝙾𝚁 ༻
@@ -606,43 +486,48 @@ ${String(
   'Error desconocido'
 ).slice(0, 900)}
 
-✰ 𝚂𝚎 𝚒𝚗𝚝𝚎𝚗𝚝𝚊𝚛𝚘𝚗:
-• SaiAPI1
-• SaiAPI2`
+✰ 𝙰𝙿𝙸:
+HikariAPI`
     )
 
   } finally {
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🧹 LIMPIAR TEMPORAL
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ═══════════════════════════════════
+    // ✰ LIMPIAR ARCHIVO TEMPORAL
+    // ═══════════════════════════════════
 
     await rm(
       filePath,
       {
-        force: true
+        force:
+          true
       }
     ).catch(() => {})
   }
 }
 
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ⚙️ CONFIGURACIÓN
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// ═══════════════════════════════════════
+// ✰ COMANDOS
+// ═══════════════════════════════════════
 
 handler.help = [
   'ytmp4doc <url>',
   'ytvdoc <url>'
 ]
 
+
 handler.tags = [
   'descargas'
 ]
 
+
 handler.command = [
   'ytmp4doc',
-  'ytvdoc'
+  'ytvdoc',
+  'mp4ytdoc'
 ]
+
 
 export default handler

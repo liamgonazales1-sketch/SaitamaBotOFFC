@@ -3,11 +3,14 @@ import config from '../../config.js'
 
 // ═══════════════════════════════════════
 // ✰ SAITAMABOT • INSTAGRAM DOWNLOADER
-// ✰ API: AZBRY
+// ✰ API: HIKARIAPI
 // ═══════════════════════════════════════
 
 const API_URL =
-  'https://api.azbry.com/api/download/instagramv2'
+  'https://hikariapi.skyultraweb.com/api/scrapers/instagram'
+
+const API_KEY =
+  'hk_live_abQitrvggZrwvQ4yN_8rwx8pj_Dy7NmDtrgMpqewG4c'
 
 const API_TIMEOUT =
   60000
@@ -21,6 +24,7 @@ function getInstagramUrl(m, text = '') {
 
   let url =
     String(text || '').trim()
+
 
   // Obtener URL desde mensaje citado
   if (!url && m.quoted) {
@@ -40,12 +44,14 @@ function getInstagramUrl(m, text = '') {
     }
   }
 
+
   // Limpiar caracteres finales
   url =
     url.replace(
       /[)\]}>,]+$/g,
       ''
     )
+
 
   return url
 }
@@ -64,7 +70,7 @@ function isInstagramUrl(url) {
 
 
 // ═══════════════════════════════════════
-// ✰ NOMBRE SEGURO
+// ✰ TEXTO SEGURO
 // ═══════════════════════════════════════
 
 function safeText(value, fallback = '') {
@@ -79,7 +85,7 @@ function safeText(value, fallback = '') {
 
 
 // ═══════════════════════════════════════
-// ✰ CAPTION DE INSTAGRAM
+// ✰ CAPTION
 // ═══════════════════════════════════════
 
 function createCaption(
@@ -109,12 +115,6 @@ async function sendVideo(
   media
 ) {
 
-  const description =
-    safeText(
-      media.text,
-      'Video de Instagram'
-    )
-
   return conn.sendMessage(
     m.chat,
     {
@@ -128,7 +128,7 @@ async function sendVideo(
 
       caption:
         createCaption(
-          description,
+          media.label || 'Video de Instagram',
           '𝚅𝚒𝚍𝚎𝚘'
         )
 
@@ -141,34 +141,31 @@ async function sendVideo(
 
 
 // ═══════════════════════════════════════
-// ✰ ENVIAR IMAGEN
+// ✰ ENVIAR AUDIO
 // ═══════════════════════════════════════
 
-async function sendImage(
+async function sendAudio(
   conn,
   m,
   media
 ) {
 
-  const description =
-    safeText(
-      media.text,
-      'Imagen de Instagram'
-    )
-
   return conn.sendMessage(
     m.chat,
     {
 
-      image: {
+      audio: {
         url: media.url
       },
 
-      caption:
-        createCaption(
-          description,
-          '𝙸𝚖𝚊𝚐𝚎𝚗'
-        )
+      mimetype:
+        'audio/mpeg',
+
+      ptt:
+        false,
+
+      fileName:
+        'SaitamaBot-Instagram.mp3'
 
     },
     {
@@ -265,7 +262,7 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
 `༺ 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ༻
 
 ✰ 𝙰𝚗𝚊𝚕𝚒𝚣𝚊𝚗𝚍𝚘 𝚎𝚗𝚕𝚊𝚌𝚎...
-✰ 𝙲𝚘𝚗𝚜𝚞𝚕𝚝𝚊𝚗𝚍𝚘 𝙰𝙿𝙸...
+✰ 𝙲𝚘𝚗𝚜𝚞𝚕𝚝𝚊𝚗𝚍𝚘 𝙷𝚒𝚔𝚊𝚛𝚒𝙰𝙿𝙸...
 ✰ 𝙾𝚋𝚝𝚎𝚗𝚒𝚎𝚗𝚍𝚘 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘...
 
 ✰ ${config.botName || 'SaitamaBot'}`
@@ -275,26 +272,34 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
   try {
 
     // ═══════════════════════════════════
-    // ✰ CONSULTAR API
+    // ✰ CONSULTAR HIKARI API
     // ═══════════════════════════════════
-
-    const api =
-      `${API_URL}?url=${encodeURIComponent(url)}`
-
 
     const response =
       await axios.get(
-        api,
+        API_URL,
         {
+          params: {
+
+            url:
+              url,
+
+            apikey:
+              API_KEY
+
+          },
+
           timeout:
             API_TIMEOUT,
 
           headers: {
+
             'User-Agent':
               'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
 
             Accept:
               'application/json'
+
           }
         }
       )
@@ -305,21 +310,42 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
 
 
     // ═══════════════════════════════════
-    // ✰ VALIDAR RESPUESTA
+    // ✰ VALIDAR RESPUESTA PRINCIPAL
     // ═══════════════════════════════════
 
     if (
       !json ||
-      json.status !== true ||
-      !Array.isArray(json.links) ||
-      !json.links.length
+      json.ok !== true ||
+      json.httpStatus !== 200 ||
+      !json.response ||
+      json.response.success !== true
+    ) {
+
+      throw new Error(
+        'La API no pudo procesar el enlace.'
+      )
+    }
+
+
+    // ═══════════════════════════════════
+    // ✰ OBTENER DATA
+    // ═══════════════════════════════════
+
+    const data =
+      json.response.data
+
+
+    if (
+      !data ||
+      !Array.isArray(data.items) ||
+      !data.items.length
     ) {
 
       return m.reply(
 
 `༺ 𝙎𝚒𝚗 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘 ༻
 
-✰ 𝙽𝚘 𝚜𝚎 𝚎𝚗𝚌𝚘𝚗𝚝𝚛ó 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘.
+✰ 𝙽𝚘 𝚜𝚎 𝚎𝚗𝚌𝚘𝚗𝚝𝚛ó 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚋𝚕𝚎.
 
 ✰ 𝙿𝚞𝚎𝚍𝚎 𝚜𝚎𝚛 𝚙𝚛𝚒𝚟𝚊𝚍𝚘, 𝚎𝚕𝚒𝚖𝚒𝚗𝚊𝚍𝚘 𝚘 𝚗𝚘 𝚍𝚒𝚜𝚙𝚘𝚗𝚒𝚋𝚕𝚎.
 
@@ -329,25 +355,26 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
 
 
     // ═══════════════════════════════════
-    // ✰ MÁXIMO 10 ARCHIVOS
+    // ✰ OBTENER ITEMS
     // ═══════════════════════════════════
 
-    const downloads =
-      json.links
+    const items =
+      data.items
         .filter(
           item =>
-            item?.url
+            item &&
+            item.url
         )
         .slice(0, 10)
 
 
-    if (!downloads.length) {
+    if (!items.length) {
 
       return m.reply(
 
 `༺ 𝙴𝚛𝚛𝚘𝚛 ༻
 
-✰ 𝙻𝚊 𝙰𝙿𝙸 𝚗𝚘 𝚍𝚎𝚟𝚘𝚕𝚟𝚒ó 𝚎𝚗𝚕𝚊𝚌𝚎𝚜 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚋𝚕𝚎𝚜.
+✰ 𝙻𝚊 𝙰𝙿𝙸 𝚗𝚘 𝚍𝚎𝚟𝚘𝚕𝚟𝚒ó 𝚎𝚗𝚕𝚊𝚌𝚎𝚜 𝚟á𝚕𝚒𝚍𝚘𝚜.
 
 ✰ ${config.botName || 'SaitamaBot'}`
       )
@@ -355,199 +382,54 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
 
 
     // ═══════════════════════════════════
-    // ✰ SEPARAR CONTENIDO
+    // ✰ SEPARAR VIDEO Y AUDIO
     // ═══════════════════════════════════
 
     const videos =
-      downloads.filter(
+      items.filter(
         item =>
           item.type === 'video'
       )
 
 
-    const images =
-      downloads.filter(
+    const audios =
+      items.filter(
         item =>
-          item.type === 'image'
+          item.type === 'audio'
       )
 
 
     // ═══════════════════════════════════
-    // ✰ VIDEO ÚNICO
+    // ✰ ENVIAR VIDEO
     // ═══════════════════════════════════
 
-    if (
-      downloads.length === 1 &&
-      downloads[0].type === 'video'
+    for (
+      const video of videos
     ) {
 
       await sendVideo(
         conn,
         m,
-        downloads[0]
+        video
       )
 
-      await conn.sendMessage(
-        m.chat,
-        {
-          react: {
-            text: '✅',
-            key: m.key
-          }
-        }
-      ).catch(() => {})
-
-      return
     }
 
 
     // ═══════════════════════════════════
-    // ✰ ÁLBUM DE IMÁGENES
-    // ═══════════════════════════════════
-
-    if (
-      images.length > 1
-    ) {
-
-      const album =
-        images.map(
-          (image, index) => {
-
-            const description =
-              safeText(
-                image.text,
-                'Contenido de Instagram'
-              )
-
-
-            return {
-
-              image: {
-                url:
-                  image.url
-              },
-
-              caption:
-                index === 0
-                  ? createCaption(
-                      description,
-                      '𝙰𝚕𝚋𝚞𝚖'
-                    )
-                  : ''
-
-            }
-
-          }
-        )
-
-
-      // Intentar álbum
-      try {
-
-        await conn.sendMessage(
-          m.chat,
-          {
-            album
-          },
-          {
-            quoted: m
-          }
-        )
-
-      } catch {
-
-        // ═══════════════════════════════
-        // ✰ FALLBACK
-        // ═══════════════════════════════
-
-        for (
-          const image of images
-        ) {
-
-          await sendImage(
-            conn,
-            m,
-            image
-          )
-        }
-      }
-
-
-      await conn.sendMessage(
-        m.chat,
-        {
-          react: {
-            text: '✅',
-            key: m.key
-          }
-        }
-      ).catch(() => {})
-
-      return
-    }
-
-
-    // ═══════════════════════════════════
-    // ✰ IMAGEN ÚNICA
-    // ═══════════════════════════════════
-
-    if (
-      images.length === 1 &&
-      videos.length === 0
-    ) {
-
-      await sendImage(
-        conn,
-        m,
-        images[0]
-      )
-
-
-      await conn.sendMessage(
-        m.chat,
-        {
-          react: {
-            text: '✅',
-            key: m.key
-          }
-        }
-      ).catch(() => {})
-
-      return
-    }
-
-
-    // ═══════════════════════════════════
-    // ✰ CONTENIDO MIXTO
+    // ✰ ENVIAR AUDIO
     // ═══════════════════════════════════
 
     for (
-      const media of downloads
+      const audio of audios
     ) {
 
-      if (!media?.url) {
-        continue
-      }
+      await sendAudio(
+        conn,
+        m,
+        audio
+      )
 
-
-      if (
-        media.type === 'video'
-      ) {
-
-        await sendVideo(
-          conn,
-          m,
-          media
-        )
-
-      } else {
-
-        await sendImage(
-          conn,
-          m,
-          media
-        )
-      }
     }
 
 
@@ -569,7 +451,7 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
   } catch (error) {
 
     // ═══════════════════════════════════
-    // ✰ ERROR
+    // ✰ REACCIÓN DE ERROR
     // ═══════════════════════════════════
 
     await conn.sendMessage(
@@ -583,6 +465,14 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
     ).catch(() => {})
 
 
+    console.error(
+      '[SAITAMABOT] Instagram API:',
+      error?.response?.data ||
+      error?.message ||
+      error
+    )
+
+
     return m.reply(
 
 `༺ 𝙴𝚛𝚛𝚘𝚛 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ༻
@@ -592,6 +482,7 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
 ✰ 𝙸𝚗𝚝𝚎𝚗𝚝𝚊 𝚗𝚞𝚎𝚟𝚊𝚖𝚎𝚗𝚝𝚎 𝚌𝚘𝚗 𝚘𝚝𝚛𝚘 𝚎𝚗𝚕𝚊𝚌𝚎.
 
 ✰ ${String(
+  error?.response?.data?.message ||
   error?.message ||
   'Error desconocido'
 ).slice(0, 300)}
@@ -634,6 +525,3 @@ handler.command = [
 
 
 handler.register = false
-
-
-export default handler
