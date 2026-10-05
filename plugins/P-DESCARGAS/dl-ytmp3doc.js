@@ -1,809 +1,495 @@
+import 'dotenv/config'
 import axios from 'axios'
 import fs from 'fs'
 import path from 'path'
 import { rm } from 'fs/promises'
-import { pipeline } from 'stream/promises'
 import { writeAudioTags } from '../../lib/audioTags.js'
 
 // ═══════════════════════════════════════
-// 𝙰𝙿𝙸 𝙿𝚁𝙸𝙽𝙲𝙸𝙿𝙰𝙻
+// ✰ SAITAMABOT • YOUTUBE MP3 DOC • HIKARI
 // ═══════════════════════════════════════
 
-const DELIRIUS_API =
-  'https://api.delirius.online/download/ytmp3'
+const API_KEY = process.env.HIKARI_API_KEY
 
-// ═══════════════════════════════════════
-// 𝙰𝙿𝙸 𝚁𝙴𝚂𝙿𝙰𝙻𝙳𝙾 𝟷
-// ═══════════════════════════════════════
-
-const STELLAR_API =
-  'https://api.stellarwa.xyz'
-
-const STELLAR_KEY =
-  'proyectsV2'
-
-// ═══════════════════════════════════════
-// 𝙰𝙿𝙸 𝚁𝙴𝚂𝙿𝙰𝙻𝙳𝙾 𝟸
-// 𝙷𝙸𝙺𝙰𝚁𝙸
-// ═══════════════════════════════════════
-
-const HIKARI_API =
+const API_URL =
   'https://hikariapi.skyultraweb.com/api/scrapers/youtube/audio'
 
-const HIKARI_API_KEY =
-  process.env.HIKARI_API_KEY ||
-  'hk_live_abQitrvggZrwvQ4yN_8rwx8pj_Dy7NmDtrgMpqewG4c'
+const TMP_DIR =
+  './tmp/saitamabot-ytmp3doc'
 
-// ═══════════════════════════════════════
-// 𝙲𝙰𝙻𝙸𝙳𝙰𝙳𝙴𝚂 𝙷𝙸𝙺𝙰𝚁𝙸
-// ═══════════════════════════════════════
-
-const HIKARI_QUALITIES = [
-  '128k',
-  '320k'
+const QUALITIES = [
+  '320k',
+  '128k'
 ]
 
-// ═══════════════════════════════════════
-// 𝙲𝙾𝙽𝙵𝙸𝙶
-// ═══════════════════════════════════════
-
-const USER_AGENT =
-  'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
-
-const API_TIMEOUT =
-  120000
-
-const DOWNLOAD_TIMEOUT =
-  600000
+const MAX_ATTEMPTS = 8
 
 // ═══════════════════════════════════════
-// 𝚃𝙸𝚃𝙻𝙴 𝙲𝙻𝙴𝙰𝙽
+// ✰ UTILIDADES
 // ═══════════════════════════════════════
 
-function cleanTitle(value) {
+const esperar = ms =>
+  new Promise(resolve => setTimeout(resolve, ms))
 
-  return String(
-    value ||
-    'YouTube Audio'
-  )
-    .replace(
-      /[<>:"/\\|?*\x00-\x1F]/g,
-      ''
-    )
-    .replace(
-      /\s+/g,
-      ' '
-    )
+function limpiarNombre(nombre = 'audio') {
+  return nombre
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
-    .slice(
-      0,
-      100
-    )
-    ||
-    'YouTube Audio'
+    .slice(0, 180) || 'audio'
+}
+
+function esMP3(buffer) {
+  if (!buffer || buffer.length < 5000) {
+    return false
+  }
+
+  // ID3
+  if (
+    buffer[0] === 0x49 &&
+    buffer[1] === 0x44 &&
+    buffer[2] === 0x33
+  ) {
+    return true
+  }
+
+  // MPEG Audio
+  if (
+    buffer[0] === 0xff &&
+    (buffer[1] & 0xe0) === 0xe0
+  ) {
+    return true
+  }
+
+  return false
 }
 
 // ═══════════════════════════════════════
-// 𝙳𝙴𝙻𝙸𝚁𝙸𝚄𝚂
-// 𝙰𝙿𝙸 𝙿𝚁𝙸𝙽𝙲𝙸𝙿𝙰𝙻
+// ✰ DESCARGAR MP3
 // ═══════════════════════════════════════
 
-async function fetchDelirius(url) {
+async function descargarArchivo(
+  url,
+  destino
+) {
+  const response = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: 120000,
 
-  const { data } =
-    await axios.get(
-      DELIRIUS_API,
-      {
-        params: {
-          url
-        },
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36',
 
-        timeout:
-          API_TIMEOUT,
+      Accept: '*/*'
+    },
 
-        headers: {
-          'User-Agent':
-            USER_AGENT,
+    validateStatus: () => true
+  })
 
-          Accept:
-            'application/json'
-        }
-      }
+  const contentType =
+    response.headers?.['content-type'] || ''
+
+  const buffer =
+    Buffer.from(response.data)
+
+  // Hikari todavía está preparando
+  if (
+    contentType.includes(
+      'application/json'
+    ) ||
+    contentType.includes(
+      'text/json'
     )
+  ) {
+    let json
+
+    try {
+      json = JSON.parse(
+        buffer.toString()
+      )
+    } catch {
+      return {
+        ready: false,
+        retryAfterSeconds: 2
+      }
+    }
+
+    if (
+      json?.status === 'preparing' ||
+      json?.success === false
+    ) {
+      return {
+        ready: false,
+
+        retryAfterSeconds:
+          Number(
+            json?.retryAfterSeconds
+          ) || 2
+      }
+    }
+
+    return {
+      ready: false,
+      retryAfterSeconds: 2
+    }
+  }
+
+  // Validar que sea MP3
+  if (!esMP3(buffer)) {
+    return {
+      ready: false,
+      retryAfterSeconds: 2
+    }
+  }
+
+  await fs.promises.writeFile(
+    destino,
+    buffer
+  )
+
+  return {
+    ready: true,
+    size: buffer.length
+  }
+}
+
+// ═══════════════════════════════════════
+// ✰ HIKARI API
+// ═══════════════════════════════════════
+
+async function obtenerAudio(
+  youtubeUrl,
+  quality
+) {
+  if (!API_KEY) {
+    throw new Error(
+      'HIKARI_API_KEY no está configurada.'
+    )
+  }
+
+  const endpoint =
+    `${API_URL}?url=${encodeURIComponent(youtubeUrl)}` +
+    `&quality=${quality}`
+
+  const response = await axios.get(
+    endpoint,
+    {
+      timeout: 60000,
+
+      headers: {
+        'X-API-Key': API_KEY,
+        Accept: 'application/json',
+        'User-Agent': 'SaitamaBot'
+      },
+
+      validateStatus: () => true
+    }
+  )
+
+  const json = response.data
+
+  const data =
+    json?.response || json
 
   if (
-    !data?.status ||
-    !data?.data?.download
+    response.status < 200 ||
+    response.status >= 300 ||
+    data?.success !== true
   ) {
-
     throw new Error(
       data?.message ||
-      'Delirius no devolvió una URL de descarga.'
+      json?.message ||
+      `Hikari respondió HTTP ${response.status}`
     )
   }
 
-  return {
+  const info = data?.data
 
-    download:
-      data.data.download,
-
-    title:
-      data.data.title ||
-      'YouTube Audio',
-
-    author:
-      data.data.author ||
-      data.data.channel ||
-      'YouTube',
-
-    image:
-      data.data.image ||
-      null,
-
-    api:
-      'Delirius'
+  if (!info) {
+    throw new Error(
+      'Hikari no devolvió los datos del audio.'
+    )
   }
+
+  if (!info.downloadUrl) {
+    throw new Error(
+      'Hikari no devolvió downloadUrl.'
+    )
+  }
+
+  return info
 }
 
 // ═══════════════════════════════════════
-// 𝚂𝙰𝙸𝙰𝙿𝙸𝟷
-// 𝙰𝙿𝙸 𝚁𝙴𝚂𝙿𝙰𝙻𝙳𝙾 𝟷
+// ✰ PROCESAR YOUTUBE
 // ═══════════════════════════════════════
 
-async function fetchSaiAPI1(url) {
+async function procesarYouTube(
+  youtubeUrl
+) {
+  let ultimoError = null
 
-  const { data } =
-    await axios.get(
-      `${STELLAR_API}/dl/ytmp3`,
-      {
-        params: {
+  for (const quality of QUALITIES) {
+    try {
+      const info =
+        await obtenerAudio(
+          youtubeUrl,
+          quality
+        )
 
-          url,
+      const filename =
+        limpiarNombre(
+          info.filename ||
+          'audio.mp3'
+        )
 
-          key:
-            STELLAR_KEY
-        },
+      const nombreFinal =
+        filename
+          .toLowerCase()
+          .endsWith('.mp3')
+          ? filename
+          : `${filename}.mp3`
 
-        timeout:
-          API_TIMEOUT,
+      const destino =
+        path.join(
+          TMP_DIR,
+          `${Date.now()}-${nombreFinal}`
+        )
 
-        headers: {
+      const fuentes = []
 
-          'User-Agent':
-            USER_AGENT,
+      // Intentar proveedor primero
+      if (info.providerUrl) {
+        fuentes.push(
+          info.providerUrl
+        )
+      }
 
-          Accept:
-            'application/json'
+      // Fallback Hikari
+      if (
+        info.downloadUrl &&
+        !fuentes.includes(
+          info.downloadUrl
+        )
+      ) {
+        fuentes.push(
+          info.downloadUrl
+        )
+      }
+
+      for (const fuente of fuentes) {
+        for (
+          let intento = 1;
+          intento <= MAX_ATTEMPTS;
+          intento++
+        ) {
+          const resultado =
+            await descargarArchivo(
+              fuente,
+              destino
+            )
+
+          if (resultado.ready) {
+            return {
+              path: destino,
+              filename: nombreFinal,
+              quality,
+              size: resultado.size
+            }
+          }
+
+          await esperar(
+            (
+              resultado.retryAfterSeconds ||
+              2
+            ) * 1000
+          )
         }
       }
-    )
 
-  const info =
-    data?.data ||
-    data?.result ||
-    data
-
-  const download =
-    info?.dl ||
-    info?.download ||
-    info?.url ||
-    info?.downloadUrl ||
-    info?.download_url ||
-    info?.dl_url ||
-    null
-
-  if (!download) {
-
-    throw new Error(
-      'SaiAPI1 no devolvió una URL de descarga.'
-    )
-  }
-
-  return {
-
-    download,
-
-    title:
-      info?.title ||
-      info?.name ||
-      'YouTube Audio',
-
-    author:
-      info?.author ||
-      info?.artist ||
-      info?.channel ||
-      'YouTube',
-
-    image:
-      info?.image ||
-      info?.thumbnail ||
-      info?.thumb ||
-      null,
-
-    api:
-      'SaiAPI1'
-  }
-}
-
-// ═══════════════════════════════════════
-// 𝙷𝙸𝙺𝙰𝚁𝙸
-// 𝙰𝙿𝙸 𝚁𝙴𝚂𝙿𝙰𝙻𝙳𝙾 𝟸
-// ═══════════════════════════════════════
-
-async function fetchHikari(url) {
-
-  // 128k o 320k aleatorio
-  const quality =
-    HIKARI_QUALITIES[
-      Math.floor(
-        Math.random() *
-        HIKARI_QUALITIES.length
+      throw new Error(
+        'Hikari no terminó de preparar el audio.'
       )
-    ]
-
-  const { data } =
-    await axios.get(
-      HIKARI_API,
-      {
-        params: {
-
-          url,
-
-          quality,
-
-          apikey:
-            HIKARI_API_KEY
-        },
-
-        timeout:
-          API_TIMEOUT,
-
-        headers: {
-
-          'User-Agent':
-            USER_AGENT,
-
-          Accept:
-            'application/json'
-        }
-      }
-    )
-
-  const response =
-    data?.response
-
-  const info =
-    response?.data
-
-  const download =
-    info?.downloadUrl ||
-    info?.url ||
-    null
-
-  if (
-    !data?.ok ||
-    data?.httpStatus !== 200 ||
-    !response?.success ||
-    !download
-  ) {
-
-    throw new Error(
-      response?.message ||
-      'HikariAPI no devolvió una URL de descarga.'
-    )
-  }
-
-  const hikariTitle =
-    String(
-      info?.filename ||
-      'YouTube Audio'
-    )
-      .replace(
-        /\.mp3$/i,
-        ''
-      )
-
-  return {
-
-    download,
-
-    title:
-      hikariTitle,
-
-    author:
-      'YouTube',
-
-    image:
-      null,
-
-    api:
-      `HikariAPI ${quality}`,
-
-    quality
-  }
-}
-
-// ═══════════════════════════════════════
-// 𝙳𝙾𝚆𝙽𝙻𝙾𝙰𝙳 𝙼𝙿𝟹
-// ═══════════════════════════════════════
-
-async function downloadAudio(
-  downloadUrl,
-  filePath
-) {
-
-  if (!downloadUrl) {
-
-    throw new Error(
-      'URL de descarga vacía.'
-    )
-  }
-
-  const response =
-    await axios.get(
-      downloadUrl,
-      {
-        responseType:
-          'stream',
-
-        timeout:
-          DOWNLOAD_TIMEOUT,
-
-        maxContentLength:
-          Infinity,
-
-        maxBodyLength:
-          Infinity,
-
-        headers: {
-
-          'User-Agent':
-            USER_AGENT,
-
-          Accept:
-            'audio/mpeg,audio/*,*/*'
-        },
-
-        validateStatus:
-          status =>
-            status >= 200 &&
-            status < 400
-      }
-    )
-
-  await pipeline(
-    response.data,
-
-    fs.createWriteStream(
-      filePath
-    )
-  )
-
-  const stat =
-    await fs.promises.stat(
-      filePath
-    )
-
-  if (
-    !stat.isFile() ||
-    stat.size < 1000
-  ) {
-
-    throw new Error(
-      'El archivo MP3 descargado es inválido.'
-    )
-  }
-
-  return stat
-}
-
-// ═══════════════════════════════════════
-// 𝙶𝙴𝚃 𝙼𝙿𝟹
-//
-// 1. Delirius
-// 2. SaiAPI1
-// 3. HikariAPI
-// ═══════════════════════════════════════
-
-async function getMp3(
-  url,
-  filePath
-) {
-
-  const errors = []
-
-  // ═══════════════════════════════════
-  // 𝟷️⃣ 𝙳𝙴𝙻𝙸𝚁𝙸𝚄𝚂
-  // ═══════════════════════════════════
-
-  try {
-
-    const media =
-      await fetchDelirius(
-        url
-      )
-
-    try {
-
-      await downloadAudio(
-        media.download,
-        filePath
-      )
-
-      return media
 
     } catch (error) {
-
-      errors.push(
-        `Delirius descarga: ${error.message}`
-      )
+      ultimoError = error
     }
-
-  } catch (error) {
-
-    errors.push(
-      `Delirius: ${error.message}`
-    )
   }
 
-  await rm(
-    filePath,
-    {
-      force:
-        true
-    }
-  ).catch(() => {})
-
-  // ═══════════════════════════════════
-  // 𝟸️⃣ 𝚂𝙰𝙸𝙰𝙿𝙸𝟷
-  // ═══════════════════════════════════
-
-  try {
-
-    const media =
-      await fetchSaiAPI1(
-        url
-      )
-
-    try {
-
-      await downloadAudio(
-        media.download,
-        filePath
-      )
-
-      return media
-
-    } catch (error) {
-
-      errors.push(
-        `SaiAPI1 descarga: ${error.message}`
-      )
-    }
-
-  } catch (error) {
-
-    errors.push(
-      `SaiAPI1: ${error.message}`
+  throw (
+    ultimoError ||
+    new Error(
+      'No se pudo obtener el audio.'
     )
-  }
-
-  await rm(
-    filePath,
-    {
-      force:
-        true
-    }
-  ).catch(() => {})
-
-  // ═══════════════════════════════════
-  // 𝟹️⃣ 𝙷𝙸𝙺𝙰𝚁𝙸
-  // ═══════════════════════════════════
-
-  try {
-
-    const media =
-      await fetchHikari(
-        url
-      )
-
-    try {
-
-      await downloadAudio(
-        media.download,
-        filePath
-      )
-
-      return media
-
-    } catch (error) {
-
-      errors.push(
-        `HikariAPI descarga: ${error.message}`
-      )
-    }
-
-  } catch (error) {
-
-    errors.push(
-      `HikariAPI: ${error.message}`
-    )
-  }
-
-  await rm(
-    filePath,
-    {
-      force:
-        true
-    }
-  ).catch(() => {})
-
-  throw new Error(
-    errors.join('\n')
   )
 }
 
 // ═══════════════════════════════════════
-// 𝙷𝙰𝙽𝙳𝙻𝙴𝚁
+// ✰ HANDLER
 // ═══════════════════════════════════════
 
 const handler = async (
   m,
   {
     conn,
-    text,
+    args,
     usedPrefix,
     command
   }
 ) => {
 
-  const input =
-    String(
-      text ||
-      ''
-    ).trim()
+  let entrada = args?.[0]
 
-  // ═══════════════════════════════════
-  // 𝙵𝙰𝙻𝚃𝙰 𝙳𝙴 𝚄𝚁𝙻
-  // ═══════════════════════════════════
-
-  if (!input) {
-
+  if (!entrada) {
     return m.reply(
-`༺═────── ✰ ──────═༻
-        𝚈𝚃𝙼𝙿𝟹 𝙳𝙾𝙲
-༺═────── ✰ ──────═༻
-
-✰ 𝙵𝚊𝚕𝚝𝚊 𝚎𝚕 𝚎𝚗𝚕𝚊𝚌𝚎 𝚍𝚎 𝚈𝚘𝚞𝚃𝚞𝚋𝚎.
-
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix + command} https://youtu.be/xxxxx`
+      `*༺═────── ✰ ──────═༻*\n` +
+      `*༻ 𝚄𝚂𝙾 ✰*\n\n` +
+      `*༻ ${usedPrefix + command} <URL o ID de YouTube>*\n` +
+      `*༺═────── ✰ ──────═༻*`
     )
   }
 
+  entrada = entrada.trim()
+
   // ═══════════════════════════════════
-  // 𝙴𝚂𝚃𝙰𝙳𝙾
+  // ✰ URL O VIDEO ID
   // ═══════════════════════════════════
 
-  await conn.sendMessage(
-    m.chat,
-    {
-      react: {
-        text:
-          '⏳',
-
-        key:
-          m.key
-      }
-    }
-  ).catch(() => {})
-
-  const tmpDir =
-    './tmp'
-
-  await fs.promises.mkdir(
-    tmpDir,
-    {
-      recursive:
-        true
-    }
-  )
-
-  const filePath =
-    path.join(
-      tmpDir,
-      `ytmp3doc_${Date.now()}.mp3`
+  const esVideoId =
+    /^[a-zA-Z0-9_-]{11}$/.test(
+      entrada
     )
 
+  const esUrlYouTube =
+    /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i
+      .test(entrada)
+
+  if (
+    !esVideoId &&
+    !esUrlYouTube
+  ) {
+    return m.reply(
+      `*༺═────── ✰ ──────═༻*\n` +
+      `*༻ 𝙴𝚁𝚁𝙾𝚁 ✰*\n\n` +
+      `*༻ La URL o ID no parece ser de YouTube.*\n` +
+      `*༺═────── ✰ ──────═༻*`
+    )
+  }
+
+  const youtubeUrl =
+    esVideoId
+      ? `https://www.youtube.com/watch?v=${entrada}`
+      : entrada
+
+  const reaccion = async emoji => {
+    try {
+      await m.react(emoji)
+    } catch {}
+  }
+
+  let archivo = null
+
   try {
+    await reaccion('⏳')
 
-    // ═════════════════════════════════
-    // 𝚈𝚘𝚞𝚃𝚞𝚋𝚎 𝚄𝚁𝙻
-    // ═════════════════════════════════
+    await fs.promises.mkdir(
+      TMP_DIR,
+      {
+        recursive: true
+      }
+    )
 
-    const ytUrl =
-      input.startsWith(
-        'http'
-      )
-        ? input
-        : `https://www.youtube.com/watch?v=${encodeURIComponent(input)}`
-
-    // ═════════════════════════════════
-    // 𝙸𝙽𝚃𝙴𝙽𝚃𝙰𝚁 𝙰𝙿𝙸𝚂
-    // ═════════════════════════════════
-
-    const media =
-      await getMp3(
-        ytUrl,
-        filePath
+    const resultado =
+      await procesarYouTube(
+        youtubeUrl
       )
 
-    const title =
-      cleanTitle(
-        media.title
-      )
-
-    const author =
-      cleanTitle(
-        media.author
-      )
+    archivo =
+      resultado.path
 
     // ═════════════════════════════════
-    // 𝚃𝙰𝙶𝚂 𝙼𝙿𝟹
+    // ✰ TAGS
     // ═════════════════════════════════
 
     try {
-
-      await writeAudioTags(
-        filePath,
-        {
-          title,
-
-          author,
-
-          artist:
-            author,
-
-          album:
-            title,
-
-          image:
-            media.image
-        }
-      )
-
+      if (
+        typeof writeAudioTags ===
+        'function'
+      ) {
+        await writeAudioTags(
+          archivo,
+          {
+            title:
+              resultado.filename
+                .replace(
+                  /\.mp3$/i,
+                  ''
+                )
+          }
+        )
+      }
     } catch {}
 
     // ═════════════════════════════════
-    // 𝙲𝙰𝙿𝚃𝙸𝙾𝙽
-    // ═════════════════════════════════
-
-    const caption =
-`༺═────── ✰ ──────═༻
-       𝚈𝙾𝚄𝚃𝚄𝙱𝙴 𝙼𝙿𝟹
-༺═────── ✰ ──────═༻
-
-✰ 𝚃í𝚝𝚞𝚕𝚘: ${title}
-✰ 𝙰𝚛𝚝𝚒𝚜𝚝𝚊 / 𝙲𝚊𝚗𝚊𝚕: ${author}
-✰ 𝙵𝚘𝚛𝚖𝚊𝚝𝚘: MP3 • 𝙳𝙾𝙲𝚄𝙼𝙴𝙽𝚃𝙾
-✰ 𝙲𝚊𝚕𝚒𝚍𝚊𝚍: ${media.quality || 'Automática'}
-✰ 𝙰𝙿𝙸: ${media.api}
-
-༺═────── ✰ ──────═༻
-        𝚂𝚊𝚒𝚝𝚊𝚖𝚊𝙱𝚘𝚝`
-
-    // ═════════════════════════════════
-    // 𝙴𝙽𝚅𝙸𝙰𝚁 𝙲𝙾𝙼𝙾 𝙳𝙾𝙲𝚄𝙼𝙴𝙽𝚃𝙾
+    // ✰ ENVIAR COMO DOCUMENTO
     // ═════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
       {
-        document:
-          fs.readFileSync(
-            filePath
-          ),
+        document: {
+          url: archivo
+        },
 
         mimetype:
           'audio/mpeg',
 
         fileName:
-          `${title}.mp3`,
+          resultado.filename,
 
-        caption
+        caption:
+          `*${resultado.filename}*`
       },
       {
-        quoted:
-          m
+        quoted: m
       }
     )
 
-    // ═════════════════════════════════
-    // 𝙴𝚇𝙸𝚃𝙾
-    // ═════════════════════════════════
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text:
-            '✅',
-
-          key:
-            m.key
-        }
-      }
-    ).catch(() => {})
+    await reaccion('✅')
 
   } catch (error) {
 
-    // ═════════════════════════════════
-    // 𝙴𝚁𝚁𝙾𝚁
-    // ═════════════════════════════════
+    await reaccion('❌')
 
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text:
-            '❌',
-
-          key:
-            m.key
-        }
-      }
-    ).catch(() => {})
-
-    return m.reply(
-`༺═────── ✰ ──────═༻
-      𝚈𝚃𝙼𝙿𝟹 𝙳𝙾𝙲 𝙴𝚁𝚁𝙾𝚁
-༺═────── ✰ ──────═༻
-
-✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚎𝚕 𝚊𝚞𝚍𝚒𝚘.
-
-✰ 𝙳𝚎𝚝𝚊𝚕𝚕𝚎𝚜:
-${String(
-  error?.message ||
-  error ||
-  'Error desconocido'
-).slice(
-  0,
-  900
-)}
-
-✰ 𝙸𝚗𝚝𝚎𝚗𝚝𝚘𝚜:
-• Delirius
-• SaiAPI1
-• HikariAPI
-
-༺═────── ✰ ──────═༻
-        𝚂𝚊𝚒𝚝𝚊𝚖𝚊𝙱𝚘𝚝`
+    await m.reply(
+      `*༺═────── ✰ ──────═༻*\n` +
+      `*༻ 𝙴𝚁𝚁𝙾𝚁 𝚈𝚃𝙼𝙿𝟹 𝙳𝙾𝙲 ✰*\n\n` +
+      `*༻ No se pudo descargar el audio.*\n` +
+      `*༻ Intenta nuevamente en unos segundos.*\n` +
+      `*༺═────── ✰ ──────═༻*`
     )
 
   } finally {
 
-    // ═════════════════════════════════
-    // 𝙻𝙸𝙼𝙿𝙸𝙰𝚁 𝚃𝙴𝙼𝙿
-    // ═════════════════════════════════
-
-    await rm(
-      filePath,
-      {
-        force:
-          true
-      }
-    ).catch(() => {})
+    if (archivo) {
+      try {
+        await rm(
+          archivo,
+          {
+            force: true
+          }
+        )
+      } catch {}
+    }
   }
 }
 
 // ═══════════════════════════════════════
-// 𝙲𝙾𝙼𝙰𝙽𝙳𝙾𝚂
+// ✰ COMANDOS
 // ═══════════════════════════════════════
 
 handler.help = [
-  'ytmp3doc <url>',
-  'ytadoc <url>',
-  'mp3ytdoc <url>'
+  'ytmp3doc <url o ID>'
 ]
 
 handler.tags = [
@@ -812,8 +498,9 @@ handler.tags = [
 
 handler.command = [
   'ytmp3doc',
-  'ytadoc',
-  'mp3ytdoc'
+  'ytadoc'
 ]
+
+handler.register = true
 
 export default handler

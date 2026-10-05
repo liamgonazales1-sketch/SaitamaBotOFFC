@@ -1,0 +1,6 @@
+
+.env
+sessions/
+tmp/
+node_modules/
+lib/database/data/activity/

@@ -452,77 +452,64 @@ async function sendYoutubeCard(
   usedPrefix
 ) {
 
-  const video =
-    results[index]
-
+  const video = results[index]
 
   if (!video) {
-
     return m.reply(
+`*༺ 𝚁𝙴𝚂𝚄𝙻𝚃𝙰𝙳𝙾 𝙸𝙽𝚅Á𝙻𝙸𝙳𝙾 ༻*
 
-`༺ 𝚁𝙴𝚂𝚄𝙻𝚃𝙰𝙳𝙾 𝙸𝙽𝚅Á𝙻𝙸𝙳𝙾 ༻
+✦ 𝙽𝚘 𝚎𝚡𝚒𝚜𝚝𝚎.
 
-✰ 𝙽𝚘 𝚎𝚡𝚒𝚜𝚝𝚎.
-
-✰ ${BOT_NAME}`
+✦ ${BOT_NAME}`
     )
   }
 
-
   // ═════════════════════════════════
-  // ✰ INFORMACIÓN
+  // ✰ INFORMACIÓN COMPACTA
   // ═════════════════════════════════
 
-const infoText =
-`*༺═────── ✰ ──────═༻*
-*༻ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ✰*
+  const infoText =
+`*༺═──── ✦ ────═༻*
+*༻ 𝚈𝙾𝚄𝚃𝚄𝙱𝙴 ✦*
 
-*༻ 𝚃í𝚝𝚞𝚕𝚘:* *${video.title}*
-*༻ 𝙲𝚊𝚗𝚊𝚕:* *${video.author}*
-*༻ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* *${video.duration}*
-*༻ 𝚅𝚒𝚜𝚝𝚊𝚜:* *${video.views}*
-*༻ 𝙿𝚞𝚋𝚕𝚒𝚌𝚊𝚍𝚘:* *${video.publishedAt}*
-*༻ 𝚁𝚎𝚜𝚞𝚕𝚝𝚊𝚍𝚘:* *${index + 1}/${results.length}*
+*✦ 𝚃í𝚝𝚞𝚕𝚘:* *${video.title}*
+*✦ 𝙲𝚊𝚗𝚊𝚕:* *${video.author}*
+*✦ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* *${video.duration}*  •  *𝚅𝚒𝚜𝚝𝚊𝚜:* *${video.views}*
+*✦ 𝙿𝚞𝚋𝚕𝚒𝚌𝚊𝚍𝚘:* *${video.publishedAt}*  •  *𝚁𝚎𝚜𝚞𝚕𝚝𝚊𝚍𝚘:* *${index + 1}/${results.length}*
 
-*༺═────── ✰ ──────═༻*
-✰ ╰┈➤ 𝟮𝟬𝟮𝟲`
-
+*༺═──── ✦ ────═༻*
+*✦ 𝟮𝟬𝟮𝟲 • ֆǟɨ ✦*`
 
   // ═════════════════════════════════
   // ✰ BOTONES
   // ═════════════════════════════════
 
   const buttons = [
-
     {
-      text:
-        '✦ 𝙵𝙾𝚁𝙼𝙰𝚃𝙾 ✦',
+      text: '༺ 𝑭𝑶𝑹𝑴𝑨𝑻𝑶 ༻',
 
       sections: [
 
         {
-          title:
-            '╭─〔 𝙰𝚄𝙳𝙸𝙾 〕─╮',
+          title: '╭─〔 𝙰𝚄𝙳𝙸𝙾 〕─╮',
 
           rows: [
 
             {
-              title:
-                '🎵 ❯ 𝙼𝙿𝟹',
+              title: '🎵 ❯ 𝙼𝙿𝟹',
 
               description:
-                '✰ 𝙳𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚊𝚞𝚍𝚒𝚘',
+                '✦ 𝙳𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚊𝚞𝚍𝚒𝚘',
 
               id:
                 `${usedPrefix}ytmp3 ${video.videoId}`
             },
 
             {
-              title:
-                '📄 ❯ 𝙼𝙿𝟹 𝙳𝙾𝙲',
+              title: '📄 ❯ 𝙼𝙿𝟹 𝙳𝙾𝙲',
 
               description:
-                '✰ 𝙰𝚞𝚍𝚒𝚘 𝚌𝚘𝚖𝚘 𝚍𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚘',
+                '✦ 𝙰𝚞𝚍𝚒𝚘 𝚌𝚘𝚖𝚘 𝚍𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚘',
 
               id:
                 `${usedPrefix}ytmp3doc ${video.videoId}`
@@ -532,28 +519,25 @@ const infoText =
         },
 
         {
-          title:
-            '╭─〔 𝚅𝙸𝙳𝙴𝙾 〕─╮',
+          title: '╭─〔 𝚅𝙸𝙳𝙴𝙾 〕─╮',
 
           rows: [
 
             {
-              title:
-                '🎬 ❯ 𝙼𝙿𝟺',
+              title: '🎬 ❯ 𝙼𝙿𝟺',
 
               description:
-                '✰ 𝙳𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚟í𝚍𝚎𝚘',
+                '✦ 𝙳𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚟í𝚍𝚎𝚘',
 
               id:
                 `${usedPrefix}ytmp4 ${video.url}`
             },
 
             {
-              title:
-                '📁 ❯ 𝙼𝙿𝟺 𝙳𝙾𝙲',
+              title: '📁 ❯ 𝙼𝙿𝟺 𝙳𝙾𝙲',
 
               description:
-                '✰ 𝚅í𝚍𝚎𝚘 𝚌𝚘𝚖𝚘 𝚍𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚘',
+                '✦ 𝚅í𝚍𝚎𝚘 𝚌𝚘𝚖𝚘 𝚍𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚘',
 
               id:
                 `${usedPrefix}ytmp4doc ${video.url}`
@@ -563,19 +547,19 @@ const infoText =
         },
 
         {
-          title:
-            '╭─〔 𝙱Ú𝚂𝚀𝚄𝙴𝙳𝙰 〕─╮',
+          title: '╭─〔 𝙱Ú𝚂𝚀𝚄𝙴𝙳𝙰 〕─╮',
 
           rows: [
 
             {
-              title:
-                '➡️ ❯ 𝚂𝙸𝙶𝚄𝙸𝙴𝙽𝚃𝙴',
+              title: '➡️ ❯ 𝚂𝙸𝙶𝚄𝙸𝙴𝙽𝚃𝙴',
 
               description:
-                `✰ ${index + 2 > results.length
-                  ? 1
-                  : index + 2}/${results.length}`,
+                `✦ ${
+                  index + 2 > results.length
+                    ? 1
+                    : index + 2
+                }/${results.length}`,
 
               id:
                 `${usedPrefix}playnext`
@@ -586,35 +570,35 @@ const infoText =
 
       ]
     }
-
   ]
 
+  // ═════════════════════════════════
+  // ✰ MINIATURA
+  // ═════════════════════════════════
+
+  const thumbnail =
+    video.thumbnail ||
+    `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`
 
   // ═════════════════════════════════
-  // ✰ ENVIAR TARJETA
+  // ✰ ENVIAR
   // ═════════════════════════════════
 
   await conn.sendMessage(
     m.chat,
     {
-
       image: {
-        url:
-          video.thumbnail
+        url: thumbnail
       },
 
-      caption:
-        infoText,
+      caption: infoText,
 
-      footer:
-        BOT_NAME,
+      footer: BOT_NAME,
 
       buttons
-
     },
     {
-      quoted:
-        m
+      quoted: m
     }
   )
 }

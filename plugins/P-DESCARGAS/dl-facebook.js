@@ -1,522 +1,213 @@
-import fetch from 'node-fetch'
-import config from '../../config.js'
+import 'dotenv/config'
+import axios from 'axios'
+import fs from 'fs'
+import path from 'path'
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ༺ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 • 𝙳𝙾𝚆𝙽𝙻𝙾𝙰𝙳𝙴𝚁 ༻
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const API_URL =
+  'https://hikariapi.skyultraweb.com/api/scrapers/facebook'
 
-const AZBRY_API =
-  'https://api.azbry.com/api/download/facebook'
+const API_KEY = process.env.HIKARI_API_KEY
 
-const USER_AGENT =
-  'Mozilla/5.0 (Linux; Android 11; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
+const TMP_DIR = './tmp'
 
-const API_TIMEOUT =
-  60_000
+const isFacebookUrl = (url = '') => {
+  return /^https?:\/\/(www\.)?(facebook\.com|fb\.watch|m\.facebook\.com)\//i.test(url)
+}
 
-const VIDEO_TIMEOUT =
-  180_000
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// OBTENER URL DE FACEBOOK
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-function getFacebookUrl(m, text = '') {
-
-  let url =
-    String(text || '').trim()
-
-  if (!url && m.quoted) {
-
-    const quotedText =
-      m.quoted.body ||
-      m.quoted.text ||
-      ''
-
-    const match =
-      quotedText.match(
-        /https?:\/\/(?:www\.)?(?:facebook\.com|fb\.watch|fb\.me|video\.fb\.com)\/[^\s]+/i
-      )
-
-    if (match) {
-      url = match[0]
-    }
-  }
-
-  return url.replace(
-    /[)\]}>,]+$/g,
-    ''
+const getFacebookUrl = (text = '') => {
+  const match = text.match(
+    /https?:\/\/(?:www\.)?(?:facebook\.com|fb\.watch|m\.facebook\.com)\/[^\s]+/i
   )
+
+  return match ? match[0].replace(/[)\]}>.,]+$/, '') : null
 }
 
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// VALIDAR URL
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-function isFacebookUrl(url) {
-
-  return /^https?:\/\/(?:www\.)?(?:facebook\.com|fb\.watch|fb\.me|video\.fb\.com)\//i
-    .test(url)
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// AZBRY FACEBOOK
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async function azbryFacebook(url) {
+const hikariFacebook = async (url) => {
+  if (!API_KEY) {
+    throw new Error(
+      'No se encontró HIKARI_API_KEY en el archivo .env'
+    )
+  }
 
   const apiUrl =
-    `${AZBRY_API}?url=${encodeURIComponent(url)}`
+    `${API_URL}?url=${encodeURIComponent(url)}`
 
-  const response =
-    await fetch(
-      apiUrl,
-      {
-        method: 'GET',
+  const response = await axios.get(apiUrl, {
+    headers: {
+      'X-API-Key': API_KEY,
+      Accept: 'application/json'
+    },
+    timeout: 60000,
+    validateStatus: () => true
+  })
 
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept': 'application/json'
-        },
-
-        timeout: API_TIMEOUT
-      }
-    )
-
-  const responseText =
-    await response.text()
-
-  if (!response.ok) {
-
+  if (response.status !== 200) {
     throw new Error(
-      `Azbry HTTP ${response.status}`
+      `Hikari respondió HTTP ${response.status}`
     )
   }
 
-  let data
+  const data = response.data
 
+  /*
+   * Hikari puede responder de estas dos formas:
+   *
+   * 1. {
+   *   success: true,
+   *   downloadUrl: "..."
+   * }
+   *
+   * 2. {
+   *   response: {
+   *     success: true,
+   *     downloadUrl: "..."
+   *   }
+   * }
+   */
+
+  const result = data?.response || data
+
+  if (!result?.success) {
+    throw new Error(
+      'Hikari no pudo obtener el vídeo de Facebook'
+    )
+  }
+
+  if (!result?.downloadUrl) {
+    throw new Error(
+      'Hikari no devolvió downloadUrl'
+    )
+  }
+
+  return result.downloadUrl
+}
+
+const downloadVideo = async (url) => {
+  fs.mkdirSync(TMP_DIR, { recursive: true })
+
+  const filename =
+    `facebook_${Date.now()}.mp4`
+
+  const filePath =
+    path.join(TMP_DIR, filename)
+
+  const response = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: 120000,
+    maxContentLength: 100 * 1024 * 1024,
+    maxBodyLength: 100 * 1024 * 1024
+  })
+
+  fs.writeFileSync(filePath, response.data)
+
+  return filePath
+}
+
+let handler = async (m, { conn, text }) => {
   try {
-
-    data =
-      JSON.parse(responseText)
-
-  } catch {
-
-    throw new Error(
-      'Azbry no respondió JSON válido.'
-    )
-  }
-
-  if (!data?.status) {
-
-    throw new Error(
-      'Azbry no pudo obtener el vídeo.'
-    )
-  }
-
-  if (
-    !Array.isArray(data?.result?.medias) ||
-    !data.result.medias.length
-  ) {
-
-    throw new Error(
-      'Azbry no devolvió vídeos disponibles.'
-    )
-  }
-
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // BUSCAR HD PRIMERO
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  const medias =
-    data.result.medias
-
-  const hd =
-    medias.find(
-      media =>
-        String(media?.quality || '').toLowerCase() === 'hd' &&
-        media?.videoAvailable === true &&
-        media?.audioAvailable === true &&
-        media?.url
-    )
-
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SI NO HAY HD, USAR CUALQUIER CALIDAD
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  const media =
-    hd ||
-    medias.find(
-      item =>
-        item?.url &&
-        item?.videoAvailable !== false
-    )
-
-
-  if (!media?.url) {
-
-    throw new Error(
-      'No se encontró una URL de vídeo válida.'
-    )
-  }
-
-
-  return {
-
-    ...data,
-
-    videoUrl:
-      media.url,
-
-    quality:
-      media.quality ||
-      '—',
-
-    size:
-      media.formattedSize ||
-      '—',
-
-    title:
-      data.result?.title ||
-      'Facebook Video',
-
-    thumbnail:
-      data.result?.thumbnail ||
-      '',
-
-    duration:
-      data.result?.duration ||
-      '—'
-  }
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// DESCARGAR VÍDEO
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async function downloadVideo(videoUrl) {
-
-  const response =
-    await fetch(
-      videoUrl,
-      {
-        method: 'GET',
-
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept': 'video/mp4,video/*,*/*',
-          'Referer': 'https://www.facebook.com/'
-        },
-
-        redirect: 'follow',
-
-        timeout: VIDEO_TIMEOUT
-      }
-    )
-
-  if (!response.ok) {
-
-    throw new Error(
-      `Facebook CDN HTTP ${response.status}`
-    )
-  }
-
-  const buffer =
-    Buffer.from(
-      await response.arrayBuffer()
-    )
-
-  if (!buffer.length) {
-
-    throw new Error(
-      'El vídeo está vacío.'
-    )
-  }
-
-  if (buffer.length < 10 * 1024) {
-
-    throw new Error(
-      'El archivo recibido no parece ser un vídeo válido.'
-    )
-  }
-
-  return buffer
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// NOMBRE DEL ARCHIVO
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-function safeFileName(title) {
-
-  return String(
-    title ||
-    'facebook-video'
-  )
-
-    .replace(
-      /[<>:"/\\|?*\x00-\x1F]/g,
-      ''
-    )
-
-    .replace(
-      /\s+/g,
-      ' '
-    )
-
-    .trim()
-
-    .slice(
-      0,
-      80
-    )
-
-    || 'facebook-video'
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// CAPTION
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-function createCaption(data) {
-
-  const title =
-    data.title ||
-    'Facebook Video'
-
-  const duration =
-    data.duration ||
-    '—'
-
-  const quality =
-    data.quality ||
-    '—'
-
-  const size =
-    data.size ||
-    '—'
-
-  return `*༺═────── ✰ ──────═༻*
-*༻ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
-
-*༻ 𝚃í𝚝𝚞𝚕𝚘:* *${title}*
-*༻ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* *${duration}*
-*༻ 𝚀𝚞𝚊𝚕𝚒𝚝𝚢:* *${quality}*
-*༻ 𝚃𝚊𝚖𝚊ñ𝚘:* *${size}*
-
-*༺═────── ✰ ──────═༻*`
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// HANDLER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-let handler = async (
-  m,
-  {
-    conn,
-    text
-  }
-) => {
-
-  const url =
-    getFacebookUrl(
-      m,
-      text
-    )
-
-
-  if (!url) {
-
-    return m.reply(
-      `*༺═────── ✰ ──────═༻*
+    const input = text?.trim()
+
+    if (!input) {
+      return m.reply(
+        `*༺═────── ✰ ──────═༻*
 
 *༻ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
 
-✰ Envía un enlace de Facebook.
+*༻ 𝚄𝚜𝚘:* .fb <𝚞𝚛𝚕>
 
-*Ejemplo:*
-.fb https://www.facebook.com/...
-
-*༺═────── ✰ ──────═༻*`
-    )
-  }
-
-
-  if (!isFacebookUrl(url)) {
-
-    return m.reply(
-      `*༺═────── ✰ ──────═༻*
-
-*༻ 𝙻𝚒𝚗𝚔 𝚒𝚗𝚟á𝚕𝚒𝚍𝚘 ✰*
-
-✰ El enlace no parece ser de Facebook.
+*༻ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:*
+.fb https://www.facebook.com/share/r/...
 
 *༺═────── ✰ ──────═༻*`
-    )
-  }
-
-
-  // REACCIÓN PROCESANDO
-
-  await conn.sendMessage(
-    m.chat,
-    {
-      react: {
-        text: '⏳',
-        key: m.key
-      }
+      )
     }
-  )
 
+    const url = getFacebookUrl(input)
 
-  await m.reply(
-    `*༺═────── ✰ ──────═༻*
+    if (!url || !isFacebookUrl(url)) {
+      return m.reply(
+        `*༺═────── ✰ ──────═༻*
 
-*༻ 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
+*༻ 𝙴𝚛𝚛𝚘𝚛 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺*
 
-✰ Analizando enlace...
-✰ Obteniendo vídeo en HD...
+✰ La URL no parece ser válida.
+
+✰ Usa una URL pública de Facebook.
 
 *༺═────── ✰ ──────═༻*`
-  )
-
-
-  try {
-
-    // Obtener vídeo desde Azbry
-
-    const data =
-      await azbryFacebook(
-        url
       )
+    }
 
+    await conn.sendMessage(
+      m.chat,
+      { react: { text: '⏳', key: m.key } }
+    )
 
-    // URL directa
+    const downloadUrl = await hikariFacebook(url)
 
-    const videoUrl =
-      data.videoUrl
+    const filePath = await downloadVideo(downloadUrl)
 
-
-    // Descargar vídeo
-
-    const videoBuffer =
-      await downloadVideo(
-        videoUrl
-      )
-
-
-    // Crear caption
-
-    const caption =
-      createCaption(
-        data
-      )
-
-
-    // Nombre
-
-    const title =
-      data.title ||
-      'Facebook Video'
-
-
-    // Enviar vídeo
+    const caption = '*Facebook Video*'
 
     await conn.sendMessage(
       m.chat,
       {
-        video: videoBuffer,
-
-        mimetype:
-          'video/mp4',
-
-        fileName:
-          `${safeFileName(title)}.mp4`,
-
+        video: fs.readFileSync(filePath),
+        mimetype: 'video/mp4',
         caption
       },
-      {
-        quoted: m
-      }
+      { quoted: m }
     )
-
-
-    // REACCIÓN ÉXITO
 
     await conn.sendMessage(
       m.chat,
-      {
-        react: {
-          text: '✰',
-          key: m.key
-        }
-      }
+      { react: { text: '✅', key: m.key } }
     )
+
+    try {
+      fs.unlinkSync(filePath)
+    } catch {}
 
   } catch (error) {
-
     console.error(
-      '[FACEBOOK DL]',
-      error
+      '[HIKARI FACEBOOK]',
+      error?.response?.data || error.message
     )
-
-
-    // REACCIÓN ERROR
 
     await conn.sendMessage(
       m.chat,
-      {
-        react: {
-          text: '❌',
-          key: m.key
-        }
-      }
+      { react: { text: '❌', key: m.key } }
     )
 
-
-    await m.reply(
+    return m.reply(
       `*༺═────── ✰ ──────═༻*
 
 *༻ 𝙴𝚁𝚁𝙾𝚁 𝙵𝙰𝙲𝙴𝙱𝙾𝙾𝙺 ✰*
 
 ✰ No se pudo descargar el vídeo.
 
-✰ ${error?.message || 'Error desconocido.'}
+✰ Hikari no pudo procesar esta URL.
 
 *༺═────── ✰ ──────═༻*`
     )
   }
 }
 
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// CONFIGURACIÓN
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 handler.help = [
-  'fb <link>',
-  'facebook <link>'
+  'fb <url>',
+  'facebook <url>'
 ]
 
 handler.tags = [
-  'descargas'
+  'download'
 ]
 
 handler.command = [
   'fb',
-  'fbdl',
   'facebook',
-  'facebookdl'
+  'fbdl'
 ]
+
+handler.register = false
 
 export default handler

@@ -1,440 +1,518 @@
+import 'dotenv/config'
 import axios from 'axios'
-import config from '../../config.js'
+import fs from 'fs'
+import path from 'path'
+import { pipeline } from 'stream/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+
+const execFileAsync = promisify(execFile)
 
 // ═══════════════════════════════════════
 // ✰ SAITAMABOT • INSTAGRAM DOWNLOADER
-// ✰ API: HIKARIAPI
 // ═══════════════════════════════════════
+
+const API_KEY = process.env.HIKARI_API_KEY
 
 const API_URL =
   'https://hikariapi.skyultraweb.com/api/scrapers/instagram'
 
-const API_KEY =
-  'hk_live_abQitrvggZrwvQ4yN_8rwx8pj_Dy7NmDtrgMpqewG4c'
-
-const API_TIMEOUT =
-  60000
-
+const TMP_DIR = './tmp/saitamabot-instagram'
 
 // ═══════════════════════════════════════
-// ✰ OBTENER URL
+// ✰ CARPETA TEMPORAL
 // ═══════════════════════════════════════
 
-function getInstagramUrl(m, text = '') {
+if (!fs.existsSync(TMP_DIR)) {
+  fs.mkdirSync(TMP_DIR, { recursive: true })
+}
 
-  let url =
-    String(text || '').trim()
+// ═══════════════════════════════════════
+// ✰ DESCARGAR ARCHIVO
+// ═══════════════════════════════════════
 
+async function descargarArchivo(url, extension = 'bin') {
+  const nombre =
+    `instagram_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.${extension}`
 
-  // Obtener URL desde mensaje citado
-  if (!url && m.quoted) {
+  const archivo = path.join(TMP_DIR, nombre)
 
-    const quotedText =
-      m.quoted.body ||
-      m.quoted.text ||
-      ''
-
-    const match =
-      quotedText.match(
-        /https?:\/\/[^\s]+/i
-      )
-
-    if (match) {
-      url = match[0]
+  const response = await axios.get(url, {
+    responseType: 'stream',
+    timeout: 120000,
+    maxRedirects: 10,
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36',
+      Referer: 'https://www.instagram.com/'
     }
-  }
+  })
 
-
-  // Limpiar caracteres finales
-  url =
-    url.replace(
-      /[)\]}>,]+$/g,
-      ''
-    )
-
-
-  return url
-}
-
-
-// ═══════════════════════════════════════
-// ✰ VALIDAR INSTAGRAM
-// ═══════════════════════════════════════
-
-function isInstagramUrl(url) {
-
-  return /^https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\//i
-    .test(url)
-
-}
-
-
-// ═══════════════════════════════════════
-// ✰ TEXTO SEGURO
-// ═══════════════════════════════════════
-
-function safeText(value, fallback = '') {
-
-  const text =
-    String(value || '')
-      .replace(/\s+/g, ' ')
-      .trim()
-
-  return text || fallback
-}
-
-
-// ═══════════════════════════════════════
-// ✰ CAPTION
-// ═══════════════════════════════════════
-
-function createCaption(
-  title,
-  type = 'INSTAGRAM'
-) {
-
-  return (
-`༺ 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ༻
-
-✰ 𝚃𝚒𝚙𝚘: ${type}
-✰ 𝙸𝚗𝚏𝚘: ${title}
-
-✰ ${config.botName || 'SaitamaBot'}`
+  await pipeline(
+    response.data,
+    fs.createWriteStream(archivo)
   )
 
+  return {
+    archivo,
+    contentType:
+      response.headers['content-type'] || ''
+  }
 }
 
-
 // ═══════════════════════════════════════
-// ✰ ENVIAR VIDEO
+// ✰ OBTENER INSTAGRAM
 // ═══════════════════════════════════════
 
-async function sendVideo(
-  conn,
-  m,
-  media
-) {
+async function obtenerInstagram(url) {
+  if (!API_KEY) {
+    throw new Error('HIKARI_API_KEY no configurada')
+  }
 
-  return conn.sendMessage(
-    m.chat,
-    {
-
-      video: {
-        url: media.url
-      },
-
-      mimetype:
-        'video/mp4',
-
-      caption:
-        createCaption(
-          media.label || 'Video de Instagram',
-          '𝚅𝚒𝚍𝚎𝚘'
-        )
-
+  const response = await axios.get(API_URL, {
+    params: {
+      url
     },
-    {
-      quoted: m
-    }
-  )
-}
-
-
-// ═══════════════════════════════════════
-// ✰ ENVIAR AUDIO
-// ═══════════════════════════════════════
-
-async function sendAudio(
-  conn,
-  m,
-  media
-) {
-
-  return conn.sendMessage(
-    m.chat,
-    {
-
-      audio: {
-        url: media.url
-      },
-
-      mimetype:
-        'audio/mpeg',
-
-      ptt:
-        false,
-
-      fileName:
-        'SaitamaBot-Instagram.mp3'
-
+    headers: {
+      'X-API-Key': API_KEY,
+      Accept: 'application/json'
     },
-    {
-      quoted: m
-    }
-  )
+    timeout: 60000
+  })
+
+  const json = response.data
+
+  const data =
+    json?.response ||
+    json
+
+  if (!data?.success) {
+    throw new Error(
+      'Hikari no pudo procesar Instagram'
+    )
+  }
+
+  const resultado = data?.data
+
+  if (!resultado) {
+    throw new Error(
+      'Hikari no devolvió datos multimedia'
+    )
+  }
+
+  return resultado
 }
 
+// ═══════════════════════════════════════
+// ✰ OBTENER EXTENSIÓN
+// ═══════════════════════════════════════
+
+function obtenerExtension(item) {
+  const url = item?.url || ''
+
+  const limpio = url.split('?')[0].toLowerCase()
+
+  if (
+    item?.type === 'video' ||
+    limpio.endsWith('.mp4')
+  ) {
+    return 'mp4'
+  }
+
+  if (
+    item?.type === 'audio' ||
+    limpio.endsWith('.mp3') ||
+    limpio.endsWith('.m4a') ||
+    limpio.endsWith('.aac')
+  ) {
+    return 'mp3'
+  }
+
+  if (
+    limpio.endsWith('.png')
+  ) {
+    return 'png'
+  }
+
+  if (
+    limpio.endsWith('.webp')
+  ) {
+    return 'webp'
+  }
+
+  return 'jpg'
+}
 
 // ═══════════════════════════════════════
-// ✰ HANDLER PRINCIPAL
+// ✰ VALIDAR ARCHIVO
 // ═══════════════════════════════════════
 
-const handler = async (
-  m,
-  {
-    conn,
-    text,
-    usedPrefix,
-    command
-  }
-) => {
+function archivoValido(archivo, tipo) {
+  try {
+    const stat = fs.statSync(archivo)
 
-  const url =
-    getInstagramUrl(
-      m,
-      text
-    )
-
-
-  // ═════════════════════════════════════
-  // ✰ SIN URL
-  // ═════════════════════════════════════
-
-  if (!url) {
-
-    return m.reply(
-
-`༺ 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ༻
-
-✰ 𝙴𝚗𝚕𝚊𝚌𝚎 𝚛𝚎𝚚𝚞𝚎𝚛𝚒𝚍𝚘
-
-✰ 𝙴𝚗𝚟í𝚊 𝚞𝚗 𝚎𝚗𝚕𝚊𝚌𝚎 𝚍𝚎 𝙸𝚗𝚜𝚝𝚊𝚐𝚛𝚊𝚖.
-
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix}${command} https://instagram.com/reel/xxxx
-
-✰ ${config.botName || 'SaitamaBot'}`
-    )
-  }
-
-
-  // ═════════════════════════════════════
-  // ✰ URL INVÁLIDA
-  // ═════════════════════════════════════
-
-  if (!isInstagramUrl(url)) {
-
-    return m.reply(
-
-`༺ 𝙴𝚗𝚕𝚊𝚌𝚎 𝚒𝚗𝚟á𝚕𝚒𝚍𝚘 ༻
-
-✰ 𝙴𝚕 𝚎𝚗𝚕𝚊𝚌𝚎 𝚗𝚘 𝚙𝚎𝚛𝚝𝚎𝚗𝚎𝚌𝚎 𝚊 𝙸𝚗𝚜𝚝𝚊𝚐𝚛𝚊𝚖.
-
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix}${command} https://instagram.com/reel/xxxx
-
-✰ ${config.botName || 'SaitamaBot'}`
-    )
-  }
-
-
-  // ═════════════════════════════════════
-  // ✰ REACCIÓN
-  // ═════════════════════════════════════
-
-  await conn.sendMessage(
-    m.chat,
-    {
-      react: {
-        text: '⏳',
-        key: m.key
-      }
+    if (tipo === 'video') {
+      return stat.size > 50000
     }
-  ).catch(() => {})
 
+    if (tipo === 'audio') {
+      return stat.size > 5000
+    }
 
-  // ═════════════════════════════════════
-  // ✰ PROCESANDO
-  // ═════════════════════════════════════
+    if (tipo === 'image') {
+      return stat.size > 5000
+    }
 
-  await m.reply(
+    return stat.size > 1000
+  } catch {
+    return false
+  }
+}
 
-`༺ 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ༻
+// ═══════════════════════════════════════
+// ✰ CONVERTIR AUDIO A MP3
+// ═══════════════════════════════════════
 
-✰ 𝙰𝚗𝚊𝚕𝚒𝚣𝚊𝚗𝚍𝚘 𝚎𝚗𝚕𝚊𝚌𝚎...
-✰ 𝙲𝚘𝚗𝚜𝚞𝚕𝚝𝚊𝚗𝚍𝚘 𝙷𝚒𝚔𝚊𝚛𝚒𝙰𝙿𝙸...
-✰ 𝙾𝚋𝚝𝚎𝚗𝚒𝚎𝚗𝚍𝚘 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘...
-
-✰ ${config.botName || 'SaitamaBot'}`
+async function convertirAudioMP3(entrada) {
+  const salida = path.join(
+    TMP_DIR,
+    `audio_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.mp3`
   )
-
 
   try {
-
-    // ═══════════════════════════════════
-    // ✰ CONSULTAR HIKARI API
-    // ═══════════════════════════════════
-
-    const response =
-      await axios.get(
-        API_URL,
-        {
-          params: {
-
-            url:
-              url,
-
-            apikey:
-              API_KEY
-
-          },
-
-          timeout:
-            API_TIMEOUT,
-
-          headers: {
-
-            'User-Agent':
-              'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
-
-            Accept:
-              'application/json'
-
-          }
-        }
-      )
-
-
-    const json =
-      response.data
-
-
-    // ═══════════════════════════════════
-    // ✰ VALIDAR RESPUESTA PRINCIPAL
-    // ═══════════════════════════════════
+    await execFileAsync(
+      'ffmpeg',
+      [
+        '-y',
+        '-i',
+        entrada,
+        '-vn',
+        '-acodec',
+        'libmp3lame',
+        '-b:a',
+        '128k',
+        salida
+      ],
+      {
+        timeout: 120000
+      }
+    )
 
     if (
-      !json ||
-      json.ok !== true ||
-      json.httpStatus !== 200 ||
-      !json.response ||
-      json.response.success !== true
+      fs.existsSync(salida) &&
+      fs.statSync(salida).size > 5000
     ) {
-
-      throw new Error(
-        'La API no pudo procesar el enlace.'
-      )
+      return salida
     }
+  } catch {}
 
+  return null
+}
 
-    // ═══════════════════════════════════
-    // ✰ OBTENER DATA
-    // ═══════════════════════════════════
+// ═══════════════════════════════════════
+// ✰ NORMALIZAR DATOS
+// ═══════════════════════════════════════
 
-    const data =
-      json.response.data
+function normalizarItems(data) {
+  if (
+    Array.isArray(data?.items)
+  ) {
+    return data.items
+      .filter(item => item?.url)
+      .map(item => ({
+        type: String(item.type || '').toLowerCase(),
+        url: item.url,
+        label: item.label || ''
+      }))
+  }
 
+  // Compatibilidad con respuestas antiguas
+  if (
+    Array.isArray(data?.media)
+  ) {
+    return data.media
+      .filter(url => typeof url === 'string')
+      .map(url => ({
+        type: 'image',
+        url,
+        label: 'image'
+      }))
+  }
 
-    if (
-      !data ||
-      !Array.isArray(data.items) ||
-      !data.items.length
-    ) {
+  return []
+}
 
-      return m.reply(
+// ═══════════════════════════════════════
+// ✰ PROCESAR INSTAGRAM
+// ═══════════════════════════════════════
 
-`༺ 𝙎𝚒𝚗 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘 ༻
+async function procesarInstagram(url) {
+  const data = await obtenerInstagram(url)
 
-✰ 𝙽𝚘 𝚜𝚎 𝚎𝚗𝚌𝚘𝚗𝚝𝚛ó 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚋𝚕𝚎.
+  const items = normalizarItems(data)
 
-✰ 𝙿𝚞𝚎𝚍𝚎 𝚜𝚎𝚛 𝚙𝚛𝚒𝚟𝚊𝚍𝚘, 𝚎𝚕𝚒𝚖𝚒𝚗𝚊𝚍𝚘 𝚘 𝚗𝚘 𝚍𝚒𝚜𝚙𝚘𝚗𝚒𝚋𝚕𝚎.
+  if (!items.length) {
+    throw new Error(
+      'No se encontraron archivos multimedia'
+    )
+  }
 
-✰ ${config.botName || 'SaitamaBot'}`
-      )
-    }
+  const descargados = []
 
+  for (const item of items) {
+    try {
+      let tipo = item.type
 
-    // ═══════════════════════════════════
-    // ✰ OBTENER ITEMS
-    // ═══════════════════════════════════
+      if (
+        tipo !== 'image' &&
+        tipo !== 'video' &&
+        tipo !== 'audio'
+      ) {
+        tipo = 'image'
+      }
 
-    const items =
-      data.items
-        .filter(
-          item =>
-            item &&
-            item.url
+      const extension =
+        obtenerExtension({
+          ...item,
+          type: tipo
+        })
+
+      const descarga =
+        await descargarArchivo(
+          item.url,
+          extension
         )
-        .slice(0, 10)
 
+      if (
+        !archivoValido(
+          descarga.archivo,
+          tipo
+        )
+      ) {
+        fs.rmSync(
+          descarga.archivo,
+          { force: true }
+        )
 
-    if (!items.length) {
+        continue
+      }
 
-      return m.reply(
+      descargados.push({
+        ...item,
+        type: tipo,
+        archivo: descarga.archivo,
+        contentType:
+          descarga.contentType
+      })
+    } catch {
+      // Continúa con el siguiente archivo
+    }
+  }
 
-`༺ 𝙴𝚛𝚛𝚘𝚛 ༻
+  if (!descargados.length) {
+    throw new Error(
+      'No se pudo descargar ningún archivo'
+    )
+  }
 
-✰ 𝙻𝚊 𝙰𝙿𝙸 𝚗𝚘 𝚍𝚎𝚟𝚘𝚕𝚟𝚒ó 𝚎𝚗𝚕𝚊𝚌𝚎𝚜 𝚟á𝚕𝚒𝚍𝚘𝚜.
+  return {
+    type: data?.type || 'post',
+    items: descargados
+  }
+}
 
-✰ ${config.botName || 'SaitamaBot'}`
+// ═══════════════════════════════════════
+// ✰ LIMPIAR ARCHIVOS
+// ═══════════════════════════════════════
+
+function limpiarArchivos(items) {
+  for (const item of items || []) {
+    if (
+      item?.archivo &&
+      fs.existsSync(item.archivo)
+    ) {
+      fs.rmSync(
+        item.archivo,
+        { force: true }
       )
     }
 
+    if (
+      item?.audioConvertido &&
+      fs.existsSync(item.audioConvertido)
+    ) {
+      fs.rmSync(
+        item.audioConvertido,
+        { force: true }
+      )
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+// ✰ HANDLER
+// ═══════════════════════════════════════
+
+const handler = async (m, { conn, args }) => {
+  const url = args?.[0]
+
+  if (!url) {
+    return m.reply(
+      `*༺═────── ✰ ──────═༻*\n` +
+      `*༻ 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ✰*\n\n` +
+      `*༻ 𝚄𝚜𝚘:* .instagram <url>\n` +
+      `*༺═────── ✰ ──────═༻*`
+    )
+  }
+
+  if (
+    !/https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\//i.test(
+      url
+    )
+  ) {
+    return m.reply(
+      `*༺═────── ✰ ──────═༻*\n` +
+      `*༻ 𝙴𝚁𝚁𝙾𝚁 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ✰*\n\n` +
+      `*༻ 𝙴𝚗𝚕𝚊𝚌𝚎 𝚗𝚘 𝚟á𝚕𝚒𝚍𝚘.*\n` +
+      `*༺═────── ✰ ──────═༻*`
+    )
+  }
+
+  let resultado = null
+
+  try {
+    await conn.sendMessage(
+      m.chat,
+      {
+        react: {
+          text: '⏳',
+          key: m.key
+        }
+      }
+    )
+
+    resultado =
+      await procesarInstagram(url)
+
+    const items = resultado.items
 
     // ═══════════════════════════════════
-    // ✰ SEPARAR VIDEO Y AUDIO
+    // ✰ SEPARAR MULTIMEDIA
     // ═══════════════════════════════════
+
+    const imagenes =
+      items.filter(
+        item => item.type === 'image'
+      )
 
     const videos =
       items.filter(
-        item =>
-          item.type === 'video'
+        item => item.type === 'video'
       )
-
 
     const audios =
       items.filter(
-        item =>
-          item.type === 'audio'
+        item => item.type === 'audio'
       )
 
-
     // ═══════════════════════════════════
-    // ✰ ENVIAR VIDEO
+    // ✰ IMÁGENES / ÁLBUM
     // ═══════════════════════════════════
 
-    for (
-      const video of videos
-    ) {
+    for (const imagen of imagenes) {
+      const label =
+        imagen.label || 'image'
 
-      await sendVideo(
-        conn,
-        m,
-        video
+      await conn.sendMessage(
+        m.chat,
+        {
+          image: {
+            url: imagen.archivo
+          },
+          caption: `*${label}*`
+        },
+        {
+          quoted: m
+        }
       )
-
     }
 
-
     // ═══════════════════════════════════
-    // ✰ ENVIAR AUDIO
+    // ✰ VIDEOS
     // ═══════════════════════════════════
 
-    for (
-      const audio of audios
-    ) {
+    for (const video of videos) {
+      const label =
+        video.label || 'video'
 
-      await sendAudio(
-        conn,
-        m,
-        audio
+      await conn.sendMessage(
+        m.chat,
+        {
+          video: {
+            url: video.archivo
+          },
+          mimetype: 'video/mp4',
+          fileName: `Instagram_${Date.now()}.mp4`,
+          caption: `*${label}*`
+        },
+        {
+          quoted: m
+        }
       )
-
     }
 
+    // ═══════════════════════════════════
+    // ✰ AUDIOS
+    // ═══════════════════════════════════
+
+    for (const audio of audios) {
+      const label =
+        audio.label || 'audio'
+
+      let archivoAudio =
+        audio.archivo
+
+      let convertido = null
+
+      if (
+        !audio.contentType.includes('mpeg') &&
+        !audio.contentType.includes('mp3')
+      ) {
+        convertido =
+          await convertirAudioMP3(
+            audio.archivo
+          )
+
+        if (convertido) {
+          archivoAudio = convertido
+
+          audio.audioConvertido =
+            convertido
+        }
+      }
+
+      await conn.sendMessage(
+        m.chat,
+        {
+          audio: {
+            url: archivoAudio
+          },
+          mimetype: 'audio/mpeg',
+          fileName: `Instagram_Audio_${Date.now()}.mp3`,
+          ptt: false
+        },
+        {
+          quoted: m
+        }
+      )
+    }
 
     // ═══════════════════════════════════
-    // ✰ REACCIÓN FINAL
+    // ✰ ÉXITO
     // ═══════════════════════════════════
 
     await conn.sendMessage(
@@ -445,14 +523,13 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
           key: m.key
         }
       }
-    ).catch(() => {})
+    )
 
-
-  } catch (error) {
-
-    // ═══════════════════════════════════
-    // ✰ REACCIÓN DE ERROR
-    // ═══════════════════════════════════
+    limpiarArchivos(items)
+  } catch {
+    if (resultado?.items) {
+      limpiarArchivos(resultado.items)
+    }
 
     await conn.sendMessage(
       m.chat,
@@ -462,66 +539,38 @@ ${usedPrefix}${command} https://instagram.com/reel/xxxx
           key: m.key
         }
       }
-    ).catch(() => {})
-
-
-    console.error(
-      '[SAITAMABOT] Instagram API:',
-      error?.response?.data ||
-      error?.message ||
-      error
     )
 
-
-    return m.reply(
-
-`༺ 𝙴𝚛𝚛𝚘𝚛 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ༻
-
-✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚎𝚕 𝚌𝚘𝚗𝚝𝚎𝚗𝚒𝚍𝚘.
-
-✰ 𝙸𝚗𝚝𝚎𝚗𝚝𝚊 𝚗𝚞𝚎𝚟𝚊𝚖𝚎𝚗𝚝𝚎 𝚌𝚘𝚗 𝚘𝚝𝚛𝚘 𝚎𝚗𝚕𝚊𝚌𝚎.
-
-✰ ${String(
-  error?.response?.data?.message ||
-  error?.message ||
-  'Error desconocido'
-).slice(0, 300)}
-
-✰ ${config.botName || 'SaitamaBot'}`
+    await conn.sendMessage(
+      m.chat,
+      {
+        text:
+          `*༺═────── ✰ ──────═༻*\n` +
+          `*༻ 𝙴𝚁𝚁𝙾𝚁 𝙸𝙽𝚂𝚃𝙰𝙶𝚁𝙰𝙼 ✰*\n\n` +
+          `*༻ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚙𝚛𝚘𝚌𝚎𝚜𝚊𝚛 𝚎𝚕 𝚎𝚗𝚕𝚊𝚌𝚎.*\n` +
+          `*༺═────── ✰ ──────═༻*`
+      },
+      {
+        quoted: m
+      }
     )
   }
 }
 
-
-// ═══════════════════════════════════════
-// ✰ CONFIGURACIÓN
-// ═══════════════════════════════════════
-
 handler.help = [
-
-  'instagram <link>',
-  'ig <link>',
-  'reel <link>',
-  'igdl <link>',
-  'instagramdl <link>'
-
+  'instagram <url>',
+  'ig <url>',
+  'igdl <url>'
 ]
-
 
 handler.tags = [
   'descargas'
 ]
 
-
 handler.command = [
-
-  'ig',
   'instagram',
-  'reel',
-  'igdl',
-  'instagramdl'
-
+  'ig',
+  'igdl'
 ]
 
-
-handler.register = false
+export default handler

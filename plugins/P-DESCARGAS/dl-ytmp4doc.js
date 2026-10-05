@@ -1,32 +1,23 @@
-
-	mport axios from 'axios'
+import 'dotenv/config'
+import axios from 'axios'
 import fs from 'fs'
 import path from 'path'
-import { rm } from 'fs/promises'
 import { pipeline } from 'stream/promises'
 
-
 // ═══════════════════════════════════════
-// ✰ SAITAMABOT • YOUTUBE MP4 DOCUMENT
-// ✰ HIKARI API
+// ✰ SAITAMABOT • YOUTUBE MP4 DOCUMENTO
 // ═══════════════════════════════════════
 
-const HIKARI_API =
+const API_HIKARI =
   'https://hikariapi.skyultraweb.com/api/scrapers/youtube/video'
 
+const CLAVE_HIKARI =
+  process.env.HIKARI_API_KEY
 
-// Coloca tu clave de HikariAPI aquí
-// o utiliza la variable de entorno HIKARI_API_KEY
-const HIKARI_API_KEY =
-  process.env.HIKARI_API_KEY || 'hk_live_abQitrvggZrwvQ4yN_8rwx8pj_Dy7NmDtrgMpqewG4c'
+const CARPETA_TEMPORAL =
+  path.resolve('./tmp/saitamabot-ytmp4doc')
 
-
-// ═══════════════════════════════════════
-// ✰ CALIDADES
-// De mayor a menor
-// ═══════════════════════════════════════
-
-const QUALITIES = [
+const CALIDADES = [
   '1080p',
   '720p',
   '480p',
@@ -35,239 +26,400 @@ const QUALITIES = [
   '144p'
 ]
 
-
-const USER_AGENT =
-  'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
-
-
-const API_TIMEOUT =
-  120000
-
-
-const DOWNLOAD_TIMEOUT =
-  600000
-
-
+const esperar = ms =>
+  new Promise(resolve =>
+    setTimeout(resolve, ms)
+  )
 
 // ═══════════════════════════════════════
-// ✰ OBTENER VIDEO
-// ✰ BUSCA LA MEJOR CALIDAD DISPONIBLE
+// ✰ CARPETA TEMPORAL
 // ═══════════════════════════════════════
 
-async function fetchHikari(url) {
+if (!fs.existsSync(CARPETA_TEMPORAL)) {
+  fs.mkdirSync(CARPETA_TEMPORAL, {
+    recursive: true
+  })
+}
 
-  let lastError = null
+// ═══════════════════════════════════════
+// ✰ REACCIÓN
+// ═══════════════════════════════════════
 
+async function reaccionar(m, emoji) {
+  try {
+    await m.react(emoji)
+  } catch {}
+}
 
-  for (const quality of QUALITIES) {
+// ═══════════════════════════════════════
+// ✰ OBTENER INFORMACIÓN
+// ═══════════════════════════════════════
 
-    try {
+async function obtenerVideo(url, calidad) {
 
-      const response =
-        await axios.get(
-          HIKARI_API,
-          {
-            params: {
-              url,
-              quality,
-              apikey: HIKARI_API_KEY
-            },
-
-            timeout:
-              API_TIMEOUT,
-
-            headers: {
-              'User-Agent':
-                USER_AGENT,
-
-              Accept:
-                'application/json'
-            }
-          }
-        )
-
-
-      const json =
-        response?.data
-
-
-      // ═════════════════════════════════
-      // ✰ VALIDAR RESPUESTA
-      // ═════════════════════════════════
-
-      if (
-        !json?.ok ||
-        json?.httpStatus !== 200 ||
-        !json?.response?.success
-      ) {
-
-        lastError =
-          new Error(
-            json?.response?.message ||
-            json?.message ||
-            `Hikari no pudo obtener ${quality}.`
-          )
-
-        continue
-      }
-
-
-      const data =
-        json.response?.data
-
-
-      if (!data) {
-
-        lastError =
-          new Error(
-            `Hikari no devolvió datos para ${quality}.`
-          )
-
-        continue
-      }
-
-
-      const downloadUrl =
-        data.downloadUrl ||
-        data.url
-
-
-      if (!downloadUrl) {
-
-        lastError =
-          new Error(
-            `Hikari no devolvió enlace para ${quality}.`
-          )
-
-        continue
-      }
-
-
-      // ═════════════════════════════════
-      // ✰ CALIDAD ENCONTRADA
-      // ═════════════════════════════════
-
-      return {
-
-        download:
-          downloadUrl,
-
-        title:
-          data.filename ||
-          'YouTube Video',
-
-        quality:
-          json.response?.quality ||
-          quality,
-
-        filename:
-          data.filename ||
-          'YouTube Video'
-      }
-
-
-    } catch (error) {
-
-      lastError =
-        error
-
-      continue
-    }
+  if (!CLAVE_HIKARI) {
+    throw new Error(
+      'HIKARI_API_KEY no está configurada.'
+    )
   }
 
+  const respuesta = await axios.get(
+    API_HIKARI,
+    {
+      params: {
+        url,
+        quality: calidad
+      },
 
-  throw new Error(
-    lastError?.message ||
-    'No se pudo obtener ninguna calidad disponible.'
+      headers: {
+        'X-API-Key': CLAVE_HIKARI,
+        'Accept': 'application/json'
+      },
+
+      timeout: 60000
+    }
+  )
+
+  const json =
+    respuesta.data
+
+  const resultado =
+    json?.response || json
+
+  if (!resultado?.success) {
+    throw new Error(
+      resultado?.message ||
+      'Hikari no pudo procesar el video.'
+    )
+  }
+
+  return resultado
+}
+
+// ═══════════════════════════════════════
+// ✰ DESCARGAR PROVIDER URL
+// ═══════════════════════════════════════
+
+async function descargarProveedor(
+  url,
+  archivo
+) {
+
+  const respuesta = await axios.get(
+    url,
+    {
+      responseType: 'stream',
+
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36',
+
+        'Accept':
+          'video/mp4,video/*,*/*'
+      },
+
+      maxRedirects: 10,
+
+      timeout: 180000,
+
+      validateStatus: estado =>
+        estado >= 200 &&
+        estado < 400
+    }
+  )
+
+  const escritor =
+    fs.createWriteStream(archivo)
+
+  await pipeline(
+    respuesta.data,
+    escritor
   )
 }
 
-
-
 // ═══════════════════════════════════════
-// ✰ DESCARGAR VIDEO
+// ✰ DESCARGAR DESDE HIKARI
 // ═══════════════════════════════════════
 
-async function downloadVideo(url) {
+async function descargarHikari(
+  url,
+  archivo
+) {
 
-  if (!url) {
+  const respuesta = await axios.get(
+    url,
+    {
+      responseType: 'stream',
 
-    throw new Error(
-      'URL de descarga vacía.'
-    )
-  }
+      headers: {
+        'X-API-Key': CLAVE_HIKARI,
 
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36',
 
-  const response =
-    await axios.get(
-      url,
-      {
-        responseType:
-          'stream',
+        'Accept':
+          'video/mp4,video/*,application/json,*/*'
+      },
 
-        timeout:
-          DOWNLOAD_TIMEOUT,
+      maxRedirects: 10,
 
-        maxContentLength:
-          Infinity,
+      timeout: 180000,
 
-        maxBodyLength:
-          Infinity,
+      validateStatus: estado =>
+        estado >= 200 &&
+        estado < 400
+    }
+  )
 
-        headers: {
-          'User-Agent':
-            USER_AGENT,
+  const escritor =
+    fs.createWriteStream(archivo)
 
-          Accept:
-            'video/mp4,video/*,*/*'
-        },
-
-        validateStatus:
-          status =>
-            status >= 200 &&
-            status < 400
-      }
-    )
-
-
-  return response.data
+  await pipeline(
+    respuesta.data,
+    escritor
+  )
 }
 
-
-
 // ═══════════════════════════════════════
-// ✰ NOMBRE SEGURO
+// ✰ COMPROBAR MP4
 // ═══════════════════════════════════════
 
-function safeFileName(title) {
+function comprobarMP4(archivo) {
+
+  if (!fs.existsSync(archivo)) {
+    return false
+  }
+
+  const informacion =
+    fs.statSync(archivo)
+
+  if (informacion.size < 100000) {
+    return false
+  }
+
+  const descriptor =
+    fs.openSync(archivo, 'r')
+
+  const buffer =
+    Buffer.alloc(32)
+
+  fs.readSync(
+    descriptor,
+    buffer,
+    0,
+    32,
+    0
+  )
+
+  fs.closeSync(descriptor)
+
+  const firma =
+    buffer.toString(
+      'ascii',
+      4,
+      8
+    )
+
+  return firma === 'ftyp'
+}
+
+// ═══════════════════════════════════════
+// ✰ LIMPIAR TÍTULO
+// ═══════════════════════════════════════
+
+function limpiarTitulo(titulo) {
 
   return String(
-    title ||
-    'YouTube Video'
+    titulo || 'Video de YouTube'
   )
+
+    .replace(
+      /\s*\(\s*\d{3,4}p[^)]*\)\s*/gi,
+      ''
+    )
 
     .replace(
       /[<>:"/\\|?*\x00-\x1F]/g,
       ''
     )
 
-    .replace(
-      /\s+/g,
-      ' '
-    )
-
     .trim()
-
-    .slice(
-      0,
-      100
-    )
-
-    ||
-    'YouTube Video'
 }
 
+// ═══════════════════════════════════════
+// ✰ PROCESAR VIDEO
+// ═══════════════════════════════════════
 
+async function procesarVideo(
+  urlYoutube,
+  calidad
+) {
+
+  const resultado =
+    await obtenerVideo(
+      urlYoutube,
+      calidad
+    )
+
+  const datos =
+    resultado?.data
+
+  if (!datos) {
+    throw new Error(
+      'Hikari no devolvió los datos del video.'
+    )
+  }
+
+  const titulo =
+    limpiarTitulo(
+      datos.filename
+    )
+
+  const nombreArchivo =
+    `${Date.now()}-${titulo}.mp4`
+
+  const archivo =
+    path.join(
+      CARPETA_TEMPORAL,
+      nombreArchivo
+    )
+
+  // ═══════════════════════════════════
+  // ✰ PRIMERA OPCIÓN: PROVIDER URL
+  // ═══════════════════════════════════
+
+  if (datos.providerUrl) {
+
+    try {
+
+      await descargarProveedor(
+        datos.providerUrl,
+        archivo
+      )
+
+      if (
+        comprobarMP4(archivo)
+      ) {
+
+        return {
+          archivo,
+          titulo
+        }
+      }
+
+      if (fs.existsSync(archivo)) {
+        fs.unlinkSync(archivo)
+      }
+
+    } catch {
+
+      if (fs.existsSync(archivo)) {
+        fs.unlinkSync(archivo)
+      }
+    }
+  }
+
+  // ═══════════════════════════════════
+  // ✰ SEGUNDA OPCIÓN: DOWNLOAD URL
+  // ═══════════════════════════════════
+
+  if (!datos.downloadUrl) {
+    throw new Error(
+      'Hikari no proporcionó una URL de descarga.'
+    )
+  }
+
+  // Hikari puede necesitar varios intentos
+  for (
+    let intento = 1;
+    intento <= 8;
+    intento++
+  ) {
+
+    try {
+
+      await descargarHikari(
+        datos.downloadUrl,
+        archivo
+      )
+
+      // MP4 listo
+      if (
+        comprobarMP4(archivo)
+      ) {
+
+        return {
+          archivo,
+          titulo
+        }
+      }
+
+      // ═══════════════════════════════
+      // ✰ HIKARI TODAVÍA PREPARANDO
+      // ═══════════════════════════════
+
+      if (
+        fs.existsSync(archivo)
+      ) {
+
+        const tamaño =
+          fs.statSync(archivo).size
+
+        if (tamaño < 50000) {
+
+          const contenido =
+            fs.readFileSync(
+              archivo,
+              'utf8'
+            )
+
+          let json = null
+
+          try {
+            json =
+              JSON.parse(contenido)
+          } catch {}
+
+          if (
+            json?.status === 'preparing'
+          ) {
+
+            const segundos =
+              Number(
+                json.retryAfterSeconds
+              ) || 2
+
+            fs.unlinkSync(
+              archivo
+            )
+
+            await esperar(
+              segundos * 1000
+            )
+
+            continue
+          }
+        }
+
+        fs.unlinkSync(
+          archivo
+        )
+      }
+
+    } catch {
+
+      if (fs.existsSync(archivo)) {
+        fs.unlinkSync(archivo)
+      }
+
+      await esperar(2000)
+    }
+  }
+
+  throw new Error(
+    'Hikari no terminó de preparar el MP4.'
+  )
+}
 
 // ═══════════════════════════════════════
 // ✰ HANDLER
@@ -277,257 +429,169 @@ const handler = async (
   m,
   {
     conn,
-    text,
-    usedPrefix,
-    command
+    text
   }
 ) => {
 
-  const input =
-    String(
-      text || ''
-    ).trim()
-
-
-  // ═════════════════════════════════════
-  // ✰ SIN URL
-  // ═════════════════════════════════════
-
-  if (!input) {
-
-    return m.reply(
-`༺ 𝚈𝚃𝙼𝙿𝟺 𝙳𝙾𝙲 ༻
-
-✰ 𝙵𝚊𝚕𝚝𝚊 𝚎𝚕 𝚎𝚗𝚕𝚊𝚌𝚎 𝚍𝚎 𝚈𝚘𝚞𝚃𝚞𝚋𝚎.
-
-✰ 𝙴𝚓𝚎𝚖𝚙𝚕𝚘:
-${usedPrefix + command} https://youtu.be/xxxxx`
-    )
+  if (!text) {
+    return
   }
 
+  const urlYoutube =
+    text.trim()
 
-  // ═════════════════════════════════════
-  // ✰ REACCIÓN
-  // ═════════════════════════════════════
+  // ═══════════════════════════════════
+  // ✰ VALIDAR YOUTUBE
+  // ═══════════════════════════════════
 
-  await conn.sendMessage(
-    m.chat,
-    {
-      react: {
-        text: '⏳',
-        key: m.key
-      }
-    }
-  ).catch(() => {})
+  if (
+    !urlYoutube.includes(
+      'youtube.com'
+    ) &&
+    !urlYoutube.includes(
+      'youtu.be'
+    )
+  ) {
 
-
-  // ═════════════════════════════════════
-  // ✰ DIRECTORIO TEMPORAL
-  // ═════════════════════════════════════
-
-  const tmpDir =
-    './tmp'
-
-
-  await fs.promises.mkdir(
-    tmpDir,
-    {
-      recursive:
-        true
-    }
-  )
-
-
-  const filePath =
-    path.join(
-      tmpDir,
-      `ytmp4doc_${Date.now()}.mp4`
+    await reaccionar(
+      m,
+      '❌'
     )
 
+    return
+  }
+
+  // SOLO REACCIÓN
+  await reaccionar(
+    m,
+    '⏳'
+  )
+
+  let resultado = null
+  let ultimoError = null
 
   try {
 
     // ═══════════════════════════════════
-    // ✰ YOUTUBE URL
+    // ✰ PROBAR CALIDADES
     // ═══════════════════════════════════
 
-    const ytUrl =
-      input.startsWith('http')
-        ? input
-        : `https://www.youtube.com/watch?v=${encodeURIComponent(input)}`
-
-
-    // ═══════════════════════════════════
-    // ✰ HIKARI
-    // ✰ MEJOR CALIDAD DISPONIBLE
-    // ═══════════════════════════════════
-
-    const media =
-      await fetchHikari(
-        ytUrl
-      )
-
-
-    const title =
-      safeFileName(
-        media.title
-      )
-
-
-    // ═══════════════════════════════════
-    // ✰ DESCARGAR MP4
-    // ═══════════════════════════════════
-
-    const videoStream =
-      await downloadVideo(
-        media.download
-      )
-
-
-    await pipeline(
-      videoStream,
-      fs.createWriteStream(
-        filePath
-      )
-    )
-
-
-    // ═══════════════════════════════════
-    // ✰ COMPROBAR ARCHIVO
-    // ═══════════════════════════════════
-
-    const stat =
-      await fs.promises.stat(
-        filePath
-      )
-
-
-    if (
-      !stat.isFile() ||
-      stat.size <= 0
+    for (
+      const calidad of CALIDADES
     ) {
 
-      throw new Error(
-        'El vídeo descargado está vacío.'
+      try {
+
+        resultado =
+          await procesarVideo(
+            urlYoutube,
+            calidad
+          )
+
+        break
+
+      } catch (error) {
+
+        ultimoError =
+          error
+      }
+    }
+
+    if (!resultado) {
+      throw (
+        ultimoError ||
+        new Error(
+          'No se pudo descargar el video.'
+        )
       )
     }
 
+    const {
+      archivo,
+      titulo
+    } = resultado
 
     // ═══════════════════════════════════
-    // ✰ ENVIAR COMO DOCUMENTO
-    // ✰ CAPTION = SOLO TÍTULO
+    // ✰ ENVIAR DOCUMENTO
     // ═══════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
       {
-        document:
-          fs.readFileSync(
-            filePath
-          ),
+        document: {
+          url: archivo
+        },
 
         mimetype:
           'video/mp4',
 
         fileName:
-          `${title}.mp4`,
+          `${titulo}.mp4`,
 
         caption:
-          media.title || title
+          `*${titulo}*`
       },
       {
-        quoted:
-          m
+        quoted: m
       }
     )
 
+    // REACCIÓN FINAL
+    await reaccionar(
+      m,
+      '✅'
+    )
 
     // ═══════════════════════════════════
-    // ✰ ÉXITO
+    // ✰ BORRAR TEMPORAL
     // ═══════════════════════════════════
 
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text: '✅',
-          key: m.key
-        }
-      }
-    ).catch(() => {})
-
+    try {
+      fs.unlinkSync(
+        archivo
+      )
+    } catch {}
 
   } catch (error) {
 
-    // ═══════════════════════════════════
-    // ✰ ERROR
-    // ═══════════════════════════════════
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        react: {
-          text: '❌',
-          key: m.key
-        }
-      }
-    ).catch(() => {})
-
-
-    return m.reply(
-`༺ 𝚈𝚃𝙼𝙿𝟺 𝙳𝙾𝙲 𝙴𝚁𝚁𝙾𝚁 ༻
-
-✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚍𝚎𝚜𝚌𝚊𝚛𝚐𝚊𝚛 𝚎𝚕 𝚟í𝚍𝚎𝚘.
-
-✰ 𝙳𝚎𝚝𝚊𝚕𝚕𝚎𝚜:
-${String(
-  error?.message ||
-  error ||
-  'Error desconocido'
-).slice(0, 900)}
-
-✰ 𝙰𝙿𝙸:
-HikariAPI`
+    console.error(
+      '[YTMP4DOC]',
+      error.message
     )
 
-  } finally {
+    await reaccionar(
+      m,
+      '❌'
+    )
 
-    // ═══════════════════════════════════
-    // ✰ LIMPIAR ARCHIVO TEMPORAL
-    // ═══════════════════════════════════
+    return m.reply(
+      `*༺═────── ✰ ──────═༻*
 
-    await rm(
-      filePath,
-      {
-        force:
-          true
-      }
-    ).catch(() => {})
+*༻ 𝙴𝚁𝚁𝙾𝚁 𝚈𝚃𝙼𝙿𝟺 𝙳𝙾𝙲 ✰*
+
+*✰ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚘𝚋𝚝𝚎𝚗𝚎𝚛 𝚎𝚕 𝙼𝙿𝟺.*
+
+*༺═────── ✰ ──────═༻*`
+    )
   }
 }
-
-
 
 // ═══════════════════════════════════════
 // ✰ COMANDOS
 // ═══════════════════════════════════════
 
 handler.help = [
-  'ytmp4doc <url>',
-  'ytvdoc <url>'
+  'ytmp4doc'
 ]
-
 
 handler.tags = [
   'descargas'
 ]
-
 
 handler.command = [
   'ytmp4doc',
   'ytvdoc',
   'mp4ytdoc'
 ]
-
 
 export default handler

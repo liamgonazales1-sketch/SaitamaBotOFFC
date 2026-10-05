@@ -1,520 +1,467 @@
-
+import 'dotenv/config'
 import axios from 'axios'
-import config from '../../config.js'
+import fs from 'fs'
+import path from 'path'
+import { pipeline } from 'stream/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 
+const execFileAsync = promisify(execFile)
 
 // ═══════════════════════════════════════
-// ✦ SAITAMABOT • TIKTOK DOWNLOADER
-// ✦ HIKARI API
+// ✰ SAITAMABOT • TIKTOK DOWNLOADER
 // ═══════════════════════════════════════
 
-const HIKARI_API =
+const API_KEY = process.env.HIKARI_API_KEY
+
+const API_URL =
   'https://hikariapi.skyultraweb.com/api/scrapers/tiktok'
 
+const TMP_DIR = './tmp/saitamabot-tiktok'
 
-const HIKARI_API_KEY =
-  process.env.HIKARI_API_KEY || 'hk_live_abQitrvggZrwvQ4yN_8rwx8pj_Dy7NmDtrgMpqewG4c'
-
-
-const BOT_NAME =
-  config.botName ||
-  '𝚂𝙰𝙸𝚃𝙰𝙼𝙰𝙱𝙾𝚃'
-
-
-const API_TIMEOUT =
-  120000
-
-
-const DOWNLOAD_TIMEOUT =
-  600000
-
-
-const USER_AGENT =
-  'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
-
-
+const esperar = ms =>
+  new Promise(resolve => setTimeout(resolve, ms))
 
 // ═══════════════════════════════════════
-// ✦ FORMATEAR DURACIÓN
+// ✰ CARPETA TEMPORAL
 // ═══════════════════════════════════════
 
-function formatDuration(seconds) {
-
-  const total =
-    Number(seconds || 0)
-
-
-  if (!total)
-    return 'Desconocida'
-
-
-  const minutes =
-    Math.floor(
-      total / 60
-    )
-
-
-  const secs =
-    total % 60
-
-
-  return `${minutes}:${String(secs).padStart(2, '0')}`
+if (!fs.existsSync(TMP_DIR)) {
+  fs.mkdirSync(TMP_DIR, { recursive: true })
 }
 
-
-
 // ═══════════════════════════════════════
-// ✦ OBTENER TIKTOK
+// ✰ OBTENER TIKTOK
 // ═══════════════════════════════════════
 
-async function fetchTikTok(url) {
-
-  const response =
-    await axios.get(
-      HIKARI_API,
-      {
-        params: {
-          url,
-          apikey:
-            HIKARI_API_KEY
-        },
-
-        timeout:
-          API_TIMEOUT,
-
-        headers: {
-          'User-Agent':
-            USER_AGENT,
-
-          Accept:
-            'application/json'
-        }
-      }
-    )
-
-
-  const json =
-    response?.data
-
-
-  if (
-    !json?.ok ||
-    json?.httpStatus !== 200 ||
-    !json?.response?.success
-  ) {
-
-    throw new Error(
-      json?.response?.message ||
-      json?.message ||
-      'HikariAPI no pudo procesar el TikTok.'
-    )
+async function obtenerTikTok(url) {
+  if (!API_KEY) {
+    throw new Error('HIKARI_API_KEY no configurada')
   }
 
+  const response = await axios.get(API_URL, {
+    params: {
+      url
+    },
+    headers: {
+      'X-API-Key': API_KEY,
+      Accept: 'application/json'
+    },
+    timeout: 60000
+  })
 
-  const data =
-    json.response?.data
+  const data = response.data?.response || response.data
 
-
-  if (!data) {
-
-    throw new Error(
-      'HikariAPI no devolvió datos.'
-    )
+  if (!data?.success || !data?.downloadUrl) {
+    throw new Error('Hikari no devolvió un enlace válido')
   }
-
 
   return data
 }
 
-
-
 // ═══════════════════════════════════════
-// ✦ DESCARGAR ARCHIVO
+// ✰ OBTENER TÍTULO / DESCRIPCIÓN
 // ═══════════════════════════════════════
 
-async function downloadBuffer(url) {
+async function obtenerDescripcion(url) {
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36'
+      },
+      timeout: 20000,
+      maxRedirects: 5
+    })
 
-  if (!url)
-    throw new Error(
-      'URL de descarga vacía.'
-    )
+    const html = response.data || ''
 
+    let titulo = ''
 
-  const response =
-    await axios.get(
-      url,
-      {
-        responseType:
-          'arraybuffer',
+    const ogTitle =
+      html.match(
+        /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i
+      ) ||
+      html.match(
+        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i
+      )
 
-        timeout:
-          DOWNLOAD_TIMEOUT,
+    const ogDescription =
+      html.match(
+        /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i
+      ) ||
+      html.match(
+        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i
+      )
 
-        maxContentLength:
-          Infinity,
+    if (ogTitle?.[1]) {
+      titulo = ogTitle[1]
+    } else if (ogDescription?.[1]) {
+      titulo = ogDescription[1]
+    }
 
-        maxBodyLength:
-          Infinity,
+    titulo = titulo
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .trim()
 
-        headers: {
-          'User-Agent':
-            USER_AGENT
-        },
-
-        validateStatus:
-          status =>
-            status >= 200 &&
-            status < 400
-      }
-    )
-
-
-  const buffer =
-    Buffer.from(
-      response.data
-    )
-
-
-  if (!buffer.length) {
-
-    throw new Error(
-      'El archivo descargado está vacío.'
-    )
+    return titulo || 'TikTok'
+  } catch {
+    return 'TikTok'
   }
-
-
-  return buffer
 }
 
-
-
 // ═══════════════════════════════════════
-// ✦ HANDLER
+// ✰ DETECTAR TIPO DESDE LA URL
 // ═══════════════════════════════════════
 
-const handler = async (
-  m,
-  {
-    conn,
-    text
-  }
-) => {
-
-  let url =
-    String(
-      text || ''
-    ).trim()
-
-
-  // ═════════════════════════════════════
-  // ✦ URL DESDE MENSAJE CITADO
-  // ═════════════════════════════════════
+function detectarTipoPorUrl(url) {
+  const texto = decodeURIComponent(url || '').toLowerCase()
 
   if (
-    !url &&
-    m.quoted
+    texto.includes('mime_type=audio') ||
+    texto.includes('mime_type=audio_mpeg') ||
+    texto.includes('audio_mpeg')
   ) {
-
-    const quotedText =
-      m.quoted.body ||
-      m.quoted.text ||
-      ''
-
-
-    const match =
-      quotedText.match(
-        /https?:\/\/[^\s]+/i
-      )
-
-
-    if (match) {
-
-      url =
-        match[0]
-    }
+    return 'audio'
   }
-
-
-  // ═════════════════════════════════════
-  // ✦ SIN URL
-  // ═════════════════════════════════════
-
-  if (!url) {
-
-    return m.reply(
-`༺═────── ✦ ──────═༻
-        𝚃𝙸𝙺𝚃𝙾𝙺
-༺═────── ✦ ──────═༻
-
-╭─〔 𝙳𝙴𝚂𝙲𝙰𝚁𝙶𝙰𝚁 〕
-│
-│ ✦ Envía un enlace de TikTok.
-│
-│ ✧ Ejemplo:
-│ https://www.tiktok.com/@usuario/video/...
-│
-╰───────────────
-
-✦ ${BOT_NAME}`
-    )
-  }
-
-
-  // ═════════════════════════════════════
-  // ✦ VALIDAR URL
-  // ═════════════════════════════════════
 
   if (
-    !/tiktok\.com|vt\.tiktok\.com/i.test(url)
+    texto.includes('mime_type=video') ||
+    texto.includes('video_mp4')
   ) {
-
-    return m.reply(
-`༺═────── ✦ ──────═༻
-       𝙴𝚁𝚁𝙾𝚁 𝚃𝙸𝙺𝚃𝙾𝙺
-༺═────── ✦ ──────═༻
-
-✦ El enlace no parece pertenecer a TikTok.
-
-✧ Envía un enlace válido de TikTok.
-
-✦ ${BOT_NAME}`
-    )
+    return 'video'
   }
 
+  if (
+    texto.includes('mime_type=image') ||
+    texto.includes('.jpg') ||
+    texto.includes('.jpeg') ||
+    texto.includes('.png') ||
+    texto.includes('.webp')
+  ) {
+    return 'image'
+  }
 
-  // ═════════════════════════════════════
-  // ✦ REACCIÓN
-  // ═════════════════════════════════════
+  return null
+}
 
-  await conn.sendMessage(
-    m.chat,
-    {
-      react: {
-        text: '⏳',
-        key: m.key
-      }
+// ═══════════════════════════════════════
+// ✰ DESCARGAR ARCHIVO
+// ═══════════════════════════════════════
+
+async function descargarArchivo(url, extension) {
+  const nombre =
+    `tiktok_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.${extension}`
+
+  const archivo = path.join(TMP_DIR, nombre)
+
+  const response = await axios.get(url, {
+    responseType: 'stream',
+    timeout: 120000,
+    maxRedirects: 10,
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36',
+      Referer: 'https://www.tiktok.com/'
     }
-  ).catch(() => {})
+  })
 
+  await pipeline(response.data, fs.createWriteStream(archivo))
+
+  return {
+    archivo,
+    contentType: response.headers['content-type'] || ''
+  }
+}
+
+// ═══════════════════════════════════════
+// ✰ VALIDAR AUDIO
+// ═══════════════════════════════════════
+
+function comprobarAudio(archivo) {
+  try {
+    const stat = fs.statSync(archivo)
+
+    return stat.size > 5000
+  } catch {
+    return false
+  }
+}
+
+// ═══════════════════════════════════════
+// ✰ VALIDAR VIDEO
+// ═══════════════════════════════════════
+
+function comprobarVideo(archivo) {
+  try {
+    const stat = fs.statSync(archivo)
+
+    if (stat.size < 50000) {
+      return false
+    }
+
+    const fd = fs.openSync(archivo, 'r')
+    const buffer = Buffer.alloc(32)
+
+    fs.readSync(fd, buffer, 0, 32, 0)
+    fs.closeSync(fd)
+
+    return buffer.includes(Buffer.from('ftyp'))
+  } catch {
+    return false
+  }
+}
+
+// ═══════════════════════════════════════
+// ✰ CONVERTIR AUDIO A MP3
+// ═══════════════════════════════════════
+
+async function convertirMP3(entrada) {
+  const salida = path.join(
+    TMP_DIR,
+    `audio_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.mp3`
+  )
 
   try {
-
-    // ═══════════════════════════════════
-    // ✦ HIKARI API
-    // ═══════════════════════════════════
-
-    const data =
-      await fetchTikTok(
-        url
-      )
-
-
-    // ═══════════════════════════════════
-    // ✦ DATOS
-    // ═══════════════════════════════════
-
-    const title =
-      data.title ||
-      'TikTok'
-
-
-    const author =
-      data.author ||
-      'Desconocido'
-
-
-    const username =
-      data.username
-        ? `@${String(data.username).replace(/^@/, '')}`
-        : 'Desconocido'
-
-
-    const duration =
-      formatDuration(
-        data.duration
-      )
-
-
-    const videoUrl =
-      data.nowatermark ||
-      data.watermark
-
-
-    const audioUrl =
-      data.audio ||
-      data.music?.url
-
-
-    const images =
-      Array.isArray(data.images)
-        ? data.images.filter(Boolean)
-        : []
-
-
-    // ═══════════════════════════════════
-    // ✦ CAPTION
-    // ═══════════════════════════════════
-
-    const caption =
-`༺═────── ✦ ──────═༻
-          𝚃𝙸𝙺𝚃𝙾𝙺
-༺═────── ✦ ──────═༻
-
-〔 𝙸𝙽𝙵𝙾 〕
-
- ✦ 𝚃í𝚝𝚞𝚕𝚘:${title}
- ✦ 𝙰𝚞𝚝𝚘𝚛: ${author}
- ✦ 𝚄𝚜𝚎𝚛𝚗𝚊𝚖𝚎:${username}
- ✦ 𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:${duration}
-
-✦ ${BOT_NAME}`
-
-
-    // ═══════════════════════════════════
-    // ✦ IMÁGENES
-    // ═══════════════════════════════════
+    await execFileAsync(
+      'ffmpeg',
+      [
+        '-y',
+        '-i',
+        entrada,
+        '-vn',
+        '-acodec',
+        'libmp3lame',
+        '-b:a',
+        '128k',
+        salida
+      ],
+      {
+        timeout: 120000
+      }
+    )
 
     if (
-      images.length &&
-      !videoUrl
+      fs.existsSync(salida) &&
+      fs.statSync(salida).size > 5000
     ) {
+      return salida
+    }
+  } catch {}
 
-      for (
-        let i = 0;
-        i < images.length;
-        i++
-      ) {
+  return null
+}
 
-        try {
+// ═══════════════════════════════════════
+// ✰ PROCESAR TIKTOK
+// ═══════════════════════════════════════
 
-          const image =
-            await downloadBuffer(
-              images[i]
-            )
+async function procesarTikTok(url) {
+  const data = await obtenerTikTok(url)
 
+  const downloadUrl = data.downloadUrl
 
-          await conn.sendMessage(
-            m.chat,
-            {
-              image,
+  const tipoURL = detectarTipoPorUrl(downloadUrl)
 
-              caption:
-                i === 0
-                  ? caption
-                  : ''
-            },
-            {
-              quoted:
-                m
-            }
-          )
+  let titulo = 'TikTok'
 
-        } catch (error) {
+  if (data.title) {
+    titulo = data.title
+  } else if (data.description) {
+    titulo = data.description
+  } else {
+    titulo = await obtenerDescripcion(url)
+  }
 
-          console.error(
-            '[TIKTOK IMAGE ERROR]',
-            error?.message ||
-            error
-          )
-        }
+  // ═══════════════════════════════════
+  // ✰ AUDIO
+  // ═══════════════════════════════════
+
+  if (tipoURL === 'audio') {
+    const descarga = await descargarArchivo(
+      downloadUrl,
+      'mp3'
+    )
+
+    if (!comprobarAudio(descarga.archivo)) {
+      fs.rmSync(descarga.archivo, {
+        force: true
+      })
+
+      throw new Error('El audio descargado no es válido')
+    }
+
+    let audio = descarga.archivo
+
+    // Si no es MP3 real, intentar convertirlo
+    if (
+      !descarga.contentType.includes('mpeg') &&
+      !descarga.contentType.includes('mp3')
+    ) {
+      const convertido = await convertirMP3(
+        descarga.archivo
+      )
+
+      if (convertido) {
+        fs.rmSync(descarga.archivo, {
+          force: true
+        })
+
+        audio = convertido
       }
     }
 
+    return {
+      tipo: 'audio',
+      archivo: audio,
+      titulo
+    }
+  }
+
+  // ═══════════════════════════════════
+  // ✰ VIDEO
+  // ═══════════════════════════════════
+
+  const descarga = await descargarArchivo(
+    downloadUrl,
+    'mp4'
+  )
+
+  if (!comprobarVideo(descarga.archivo)) {
+    fs.rmSync(descarga.archivo, {
+      force: true
+    })
+
+    throw new Error('El video descargado no es válido')
+  }
+
+  return {
+    tipo: 'video',
+    archivo: descarga.archivo,
+    titulo
+  }
+}
+
+// ═══════════════════════════════════════
+// ✰ HANDLER
+// ═══════════════════════════════════════
+
+const handler = async (m, { conn, args }) => {
+  const url = args?.[0]
+
+  if (!url) {
+    return m.reply(
+      `*༺═────── ✰ ──────═༻*\n` +
+      `*༻ 𝚃𝙸𝙺𝚃𝙾𝙺 ✰*\n\n` +
+      `*༻ 𝚄𝚜𝚘:* .tiktok <url>\n` +
+      `*༺═────── ✰ ──────═༻*`
+    )
+  }
+
+  if (
+    !/https?:\/\/(?:www\.)?(?:tiktok\.com|vt\.tiktok\.com)/i.test(
+      url
+    )
+  ) {
+    return m.reply(
+      `*༺═────── ✰ ──────═༻*\n` +
+      `*༻ 𝙴𝚁𝚁𝙾𝚁 𝚃𝙸𝙺𝚃𝙾𝙺 ✰*\n\n` +
+      `*༻ 𝙴𝚗𝚕𝚊𝚌𝚎 𝚗𝚘 𝚟á𝚕𝚒𝚍𝚘.*\n` +
+      `*༺═────── ✰ ──────═༻*`
+    )
+  }
+
+  let resultado = null
+
+  try {
+    await conn.sendMessage(
+      m.chat,
+      {
+        react: {
+          text: '⏳',
+          key: m.key
+        }
+      }
+    )
+
+    resultado = await procesarTikTok(url)
+
+    const caption = `*${resultado.titulo}*`
 
     // ═══════════════════════════════════
-    // ✦ VIDEO SIN MARCA DE AGUA
+    // ✰ SOLO AUDIO
     // ═══════════════════════════════════
 
-    if (videoUrl) {
-
-      const video =
-        await downloadBuffer(
-          videoUrl
-        )
-
-
+    if (resultado.tipo === 'audio') {
       await conn.sendMessage(
         m.chat,
         {
-          video,
-
-          mimetype:
-            'video/mp4',
-
-          caption
+          audio: {
+            url: resultado.archivo
+          },
+          mimetype: 'audio/mpeg',
+          fileName: `${resultado.titulo}.mp3`,
+          ptt: false
         },
         {
-          quoted:
-            m
+          quoted: m
         }
       )
     }
 
-
     // ═══════════════════════════════════
-    // ✦ AUDIO
+    // ✰ VIDEO + AUDIO
     // ═══════════════════════════════════
 
-    if (audioUrl) {
+    if (resultado.tipo === 'video') {
+      await conn.sendMessage(
+        m.chat,
+        {
+          video: {
+            url: resultado.archivo
+          },
+          mimetype: 'video/mp4',
+          fileName: `${resultado.titulo}.mp4`,
+          caption
+        },
+        {
+          quoted: m
+        }
+      )
 
-      try {
+      const audio = await convertirMP3(
+        resultado.archivo
+      )
 
-        const audio =
-          await downloadBuffer(
-            audioUrl
-          )
-
-
+      if (audio) {
         await conn.sendMessage(
           m.chat,
           {
-            audio,
-
-            mimetype:
-              'audio/mp4',
-
-            ptt:
-              false,
-
-            fileName:
-              'SaitamaBot-TikTok-Audio.mp4'
+            audio: {
+              url: audio
+            },
+            mimetype: 'audio/mpeg',
+            fileName: `${resultado.titulo}.mp3`,
+            ptt: false
           },
           {
-            quoted:
-              m
+            quoted: m
           }
         )
 
-      } catch (audioError) {
-
-        console.error(
-          '[TIKTOK AUDIO ERROR]',
-          audioError?.message ||
-          audioError
-        )
+        fs.rmSync(audio, {
+          force: true
+        })
       }
     }
-
-
-    // ═══════════════════════════════════
-    // ✦ COMPROBAR CONTENIDO
-    // ═══════════════════════════════════
-
-    if (
-      !videoUrl &&
-      !images.length &&
-      !audioUrl
-    ) {
-
-      throw new Error(
-        'La API no devolvió video, imágenes ni audio.'
-      )
-    }
-
-
-    // ═══════════════════════════════════
-    // ✦ REACCIÓN FINAL
-    // ═══════════════════════════════════
 
     await conn.sendMessage(
       m.chat,
@@ -524,17 +471,22 @@ const handler = async (
           key: m.key
         }
       }
-    ).catch(() => {})
-
-
-  } catch (error) {
-
-    console.error(
-      '[TIKTOK ERROR]',
-      error?.message ||
-      error
     )
 
+    if (resultado.archivo && fs.existsSync(resultado.archivo)) {
+      fs.rmSync(resultado.archivo, {
+        force: true
+      })
+    }
+  } catch {
+    if (
+      resultado?.archivo &&
+      fs.existsSync(resultado.archivo)
+    ) {
+      fs.rmSync(resultado.archivo, {
+        force: true
+      })
+    }
 
     await conn.sendMessage(
       m.chat,
@@ -544,56 +496,36 @@ const handler = async (
           key: m.key
         }
       }
-    ).catch(() => {})
+    )
 
-
-    return m.reply(
-`༺═────── ✦ ──────═༻
-       𝙴𝚁𝚁𝙾𝚁 𝚃𝙸𝙺𝚃𝙾𝙺
-༺═────── ✦ ──────═༻
-
-✦ No se pudo descargar el contenido.
-
-╭─〔 𝙳𝙴𝚃𝙰𝙻𝙻𝙴 〕
-│
-│ ${String(
-  error?.message ||
-  'Error desconocido.'
-).slice(0, 500)}
-│
-╰───────────────
-
-✦ ${BOT_NAME}`
+    await conn.sendMessage(
+      m.chat,
+      {
+        text:
+          `*༺═────── ✰ ──────═༻*\n` +
+          `*༻ 𝙴𝚁𝚁𝙾𝚁 𝚃𝙸𝙺𝚃𝙾𝙺 ✰*\n\n` +
+          `*༻ 𝙽𝚘 𝚜𝚎 𝚙𝚞𝚍𝚘 𝚙𝚛𝚘𝚌𝚎𝚜𝚊𝚛 𝚎𝚕 𝚎𝚗𝚕𝚊𝚌𝚎.*\n` +
+          `*༺═────── ✰ ──────═༻*`
+      },
+      {
+        quoted: m
+      }
     )
   }
 }
 
-
-
-// ═══════════════════════════════════════
-// ✦ CONFIGURACIÓN
-// ═══════════════════════════════════════
-
 handler.help = [
-  'tiktok <link>'
+  'tiktok <url>',
+  'tt <url>',
+  'tiktokdl <url>'
 ]
 
-
-handler.tags = [
-  'descargas'
-]
-
+handler.tags = ['descargas']
 
 handler.command = [
   'tiktok',
   'tt',
-  'ttk',
-  'ttkdl',
   'tiktokdl'
 ]
-
-
-handler.register = false
-
 
 export default handler
